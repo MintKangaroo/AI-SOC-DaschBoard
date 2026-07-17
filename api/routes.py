@@ -74,6 +74,61 @@ def get_alerts():
     })
 
 
+@api_bp.route("/alerts/history", methods=["GET"])
+def alerts_history():
+    """전체 알림 이력 검색 (기간·심각도·상태·유형·IP·본문). 페이지네이션."""
+    _, td, *_ = get_services()
+    a = request.args
+    page  = max(1, a.get("page", 1, type=int))
+    limit = min(200, max(1, a.get("limit", 50, type=int)))
+    rows, total = td.search_alerts(
+        severity=a.get("severity") or None,
+        status=a.get("status") or None,
+        threat_type=a.get("threat_type") or None,
+        ip=(a.get("ip") or "").strip() or None,
+        text=(a.get("text") or "").strip() or None,
+        date_from=a.get("from") or None,
+        date_to=a.get("to") or None,
+        limit=limit, offset=(page - 1) * limit,
+    )
+    return jsonify({
+        "alerts": rows, "total": total, "page": page, "limit": limit,
+        "pages": (total + limit - 1) // limit,
+        "labels": td.threat_type_labels(),
+    })
+
+
+@api_bp.route("/alerts/history/export.csv", methods=["GET"])
+def alerts_history_export():
+    """현재 검색 조건의 알림 이력을 CSV로 내보내기 (최대 10000건)."""
+    import csv, io
+    from flask import Response
+    _, td, *_ = get_services()
+    a = request.args
+    rows, _total = td.search_alerts(
+        severity=a.get("severity") or None,
+        status=a.get("status") or None,
+        threat_type=a.get("threat_type") or None,
+        ip=(a.get("ip") or "").strip() or None,
+        text=(a.get("text") or "").strip() or None,
+        date_from=a.get("from") or None,
+        date_to=a.get("to") or None,
+        limit=10000, offset=0,
+    )
+    buf = io.StringIO()
+    buf.write("﻿")  # Excel 한글 깨짐 방지 BOM
+    w = csv.writer(buf)
+    w.writerow(["id", "timestamp", "severity", "threat_type", "threat_label",
+                "src_ip", "dst_ip", "status", "description"])
+    for r in rows:
+        w.writerow([r["id"], r["timestamp"], r["severity"], r["threat_type"],
+                    r.get("threat_label", ""), r["src_ip"], r["dst_ip"],
+                    r["status"], r["description"]])
+    return Response(buf.getvalue(), mimetype="text/csv",
+                    headers={"Content-Disposition":
+                             "attachment; filename=alert_history.csv"})
+
+
 @api_bp.route("/alerts/<int:alert_id>/status", methods=["PUT"])
 def update_alert_status(alert_id):
     _, td, *_ = get_services()

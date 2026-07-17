@@ -610,6 +610,53 @@ def test_alert_store_roundtrip(tmp_path):
     store.close()
 
 
+def test_alert_store_search_filters(tmp_path):
+    db = str(tmp_path / "alerts.db")
+    store = AlertStore(db)
+    a1 = Alert("DDOS", "CRITICAL", "185.220.101.45", "10.0.0.1", "C2 통신")
+    a1.timestamp = "2026-07-10 08:00:00"
+    a2 = Alert("PORT_SCAN", "HIGH", "203.0.113.9", "10.0.0.1", "포트 스캔 탐지")
+    a2.timestamp = "2026-07-15 09:00:00"
+    a3 = Alert("DDOS", "CRITICAL", "1.2.3.4", "10.0.0.1", "대량 트래픽")
+    a3.timestamp = "2026-07-20 10:00:00"
+    for a in (a1, a2, a3):
+        store.save(a)
+
+    # 심각도
+    rows, total = store.search(severity="CRITICAL")
+    assert total == 2 and all(r["severity"] == "CRITICAL" for r in rows)
+    # 유형
+    _, total = store.search(threat_type="PORT_SCAN")
+    assert total == 1
+    # IP 부분일치(src/dst)
+    _, total = store.search(ip="185.220")
+    assert total == 1
+    # 본문 검색
+    _, total = store.search(text="스캔")
+    assert total == 1
+    # 기간(포함 경계)
+    _, total = store.search(date_from="2026-07-12", date_to="2026-07-16")
+    assert total == 1
+    # 페이지네이션: 최신 우선(id DESC)
+    rows, total = store.search(limit=2, offset=0)
+    assert total == 3 and len(rows) == 2
+    assert rows[0]["id"] > rows[1]["id"]
+    # 조건 없으면 전체
+    _, total = store.search()
+    assert total == 3
+    store.close()
+
+
+def test_detector_search_alerts_adds_label(tmp_path):
+    db = str(tmp_path / "alerts.db")
+    td = ThreatDetector(FakeSocketIO(), config={}, store_path=db)
+    td._add_alert(Alert("BRUTE_FORCE", "HIGH", "5.5.5.5", "6.6.6.6", "무차별 대입"))
+    rows, total = td.search_alerts(severity="HIGH")
+    assert total == 1
+    assert rows[0]["threat_label"] == "무차별 대입 공격"
+    td.store.close()
+
+
 def test_detector_restores_from_store(tmp_path):
     db = str(tmp_path / "alerts.db")
     td1 = ThreatDetector(FakeSocketIO(), config={}, store_path=db)

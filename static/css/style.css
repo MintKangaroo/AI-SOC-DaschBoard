@@ -53,6 +53,10 @@ html, body {
 .btn-outline-cyan:hover {
   background: var(--cyan); color: #000;
 }
+.btn-cyan {
+  background: var(--cyan); border-color: var(--cyan); color: #001417; font-weight: 600;
+}
+.btn-cyan:hover { background: #5ee0e8; border-color: #5ee0e8; color: #001417; }
 .btn-outline-purple {
   border-color: var(--purple); color: var(--purple); background: transparent;
 }

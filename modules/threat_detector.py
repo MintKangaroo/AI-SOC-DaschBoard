@@ -324,6 +324,23 @@ class ThreatDetector:
             result = [a for a in result if a.status == status]
         return [a.to_dict() for a in reversed(result)][:limit]
 
+    def search_alerts(self, **filters):
+        """전체 DB 이력 검색 (threat_label 부가). (rows, total) 반환.
+        DB 미사용(store=None) 시 in-memory 폴백."""
+        if self.store:
+            rows, total = self.store.search(**filters)
+        else:
+            rows = self.get_alerts(limit=filters.get("limit", 100),
+                                   severity=filters.get("severity"),
+                                   status=filters.get("status"))
+            total = len(rows)
+        for r in rows:
+            r["threat_label"] = THREAT_TYPES.get(r["threat_type"], r["threat_type"])
+        return rows, total
+
+    def threat_type_labels(self):
+        return dict(THREAT_TYPES)
+
     def get_stats(self):
         with self._lock:
             return dict(self.stats)

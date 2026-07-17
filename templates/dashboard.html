@@ -120,6 +120,9 @@
         <i class="fa fa-triangle-exclamation"></i><span>위협 알림</span>
         <span class="badge bg-danger ms-auto" id="sidebar-alert-count">0</span>
       </a>
+      <a href="#alert-history" class="sidebar-link" data-panel="alert-history">
+        <i class="fa fa-clock-rotate-left"></i><span>알림 이력 검색</span>
+      </a>
       <a href="#soar" class="sidebar-link" data-panel="soar">
         <i class="fa fa-robot"></i><span>SOAR 자동대응</span>
         <span class="badge bg-info text-dark ms-auto" id="sidebar-soar-count">0</span>
@@ -178,6 +181,7 @@
     {% include "panels/overview.html" %}
     {% include "panels/traffic.html" %}
     {% include "panels/alerts.html" %}
+    {% include "panels/alert-history.html" %}
     {% include "panels/packets.html" %}
     {% include "panels/sysmon.html" %}
     {% include "panels/ml.html" %}
@@ -222,5 +226,6 @@
 <script src="/static/js/dash/06-sources.js"></script>
 <script src="/static/js/dash/07-ops.js"></script>
 <script src="/static/js/dash/08-response-init.js"></script>
+<script src="/static/js/dash/09-alert-history.js"></script>
 </body>
 </html>

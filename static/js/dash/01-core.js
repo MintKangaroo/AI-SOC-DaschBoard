@@ -105,6 +105,7 @@ function showPanel(name) {
   if (name === 'overview') setTimeout(initMap, 50);
   if (name === 'traffic') initTrafficCharts();
   if (name === 'alerts') loadAlerts();
+  if (name === 'alert-history') loadAlertHistory();
   if (name === 'packets') initPacketsTable();
   if (name === 'sysmon') initSysmonTable();
   if (name === 'ml') { setTimeout(initMLCharts, 50); loadDecisionSupport(); }
