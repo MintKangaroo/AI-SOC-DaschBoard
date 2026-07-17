@@ -55,6 +55,39 @@ function closeSidebar() {
   document.getElementById('sidebar-backdrop')?.classList.remove('show');
 }
 
+/* ─────────────────── 사이드바 접이식 그룹 ─────────────────── */
+function toggleGroup(name) {
+  const body = document.getElementById('sgroup-' + name);
+  const head = document.getElementById('sgroup-head-' + name);
+  if (!body || !head) return;
+  const opened = !body.classList.toggle('collapsed');
+  head.classList.toggle('open', opened);
+}
+
+function expandGroupFor(link) {
+  const body = link.closest('.sidebar-group-body');
+  if (!body) return;
+  body.classList.remove('collapsed');
+  const head = document.getElementById('sgroup-head-' + body.id.replace('sgroup-', ''));
+  if (head) head.classList.add('open');
+}
+
+/* 그룹 헤더 배지: 하위 카운트 합산 (접혀 있어도 현황 파악 가능) */
+function updateGroupBadges() {
+  document.querySelectorAll('.sidebar-group-body').forEach(body => {
+    const badge = document.getElementById('sgroup-badge-' + body.id.replace('sgroup-', ''));
+    if (!badge) return;
+    let sum = 0;
+    body.querySelectorAll('.sidebar-link .badge').forEach(b => {
+      const v = parseInt(String(b.textContent).replace(/[,%]/g, ''), 10);
+      if (!isNaN(v) && b.id !== 'sidebar-purple-cov') sum += v;
+    });
+    badge.textContent = sum.toLocaleString();
+    badge.classList.toggle('d-none', sum === 0);
+  });
+}
+setInterval(updateGroupBadges, 3000);
+
 /* ─────────────────── 패널 전환 ─────────────────── */
 function showPanel(name) {
   document.querySelectorAll('.panel-section').forEach(p => p.classList.add('d-none'));
@@ -63,7 +96,7 @@ function showPanel(name) {
 
   document.querySelectorAll('.sidebar-link').forEach(l => l.classList.remove('active'));
   const link = document.querySelector(`[data-panel="${name}"]`);
-  if (link) link.classList.add('active');
+  if (link) { link.classList.add('active'); expandGroupFor(link); }
 
   closeSidebar();   // 모바일: 패널 선택 시 드로어 닫기
 
@@ -3808,6 +3841,14 @@ function incPipe(id) {
 /* ════════════════════ 초기화 ════════════════════ */
 document.addEventListener('DOMContentLoaded', () => {
   showPanel('overview');
+
+  // 데모 모드 표시 (합성 데이터임을 명시)
+  fetch('/api/whoami')
+    .then(r => r.json())
+    .then(d => {
+      if (d.demo) document.getElementById('demo-badge')?.classList.remove('d-none');
+    })
+    .catch(() => {});
 
   // 초기 데이터 로드
   fetch('/api/dashboard/summary')

@@ -28,6 +28,8 @@
     <span class="fw-bold fs-5 text-white brand-full">SOC 보안관제 대시보드</span>
     <span class="fw-bold fs-6 text-white brand-short">SOC</span>
     <span class="badge bg-success ms-2 live-badge" id="badge-status">LIVE</span>
+    <span class="badge bg-warning text-dark ms-1 d-none" id="demo-badge"
+          title="데모 모드 — 표시되는 이벤트는 합성 데이터입니다">DEMO</span>
   </div>
   <div class="d-flex align-items-center gap-3 ms-auto text-muted small">
     <span id="current-time" class="nav-hide-mobile"></span>
@@ -43,110 +45,131 @@
 <!-- ══════════════ LAYOUT ══════════════ -->
 <div class="d-flex" style="height: calc(100vh - 56px);">
 
-  <!-- ── SIDEBAR ── -->
+  <!-- ── SIDEBAR: SOC 워크플로 순서 (수집·탐지 → 분석 → 대응) ── -->
   <nav class="sidebar d-flex flex-column" id="sidebar">
     <a href="#overview" class="sidebar-link active" data-panel="overview">
       <i class="fa fa-satellite-dish"></i><span>AI 관제 센터</span>
     </a>
 
-    <div class="sidebar-section-label">① 실시간 관제 (SIEM)</div>
-    <a href="#siem" class="sidebar-link" data-panel="siem">
-      <i class="fa fa-server"></i><span>SIEM 이벤트</span>
-      <span class="badge bg-danger ms-auto" id="sidebar-siem-count">0</span>
-    </a>
-    <a href="#authlog" class="sidebar-link" data-panel="authlog">
-      <i class="fa fa-key"></i><span>SSH 인증</span>
-      <span class="badge bg-danger ms-auto" id="sidebar-auth-count">0</span>
-    </a>
-    <a href="#traffic" class="sidebar-link" data-panel="traffic">
-      <i class="fa fa-chart-line"></i><span>네트워크 트래픽</span>
-    </a>
-    <a href="#packets" class="sidebar-link" data-panel="packets">
-      <i class="fa fa-network-wired"></i><span>패킷 분석</span>
-    </a>
-    <a href="#sysmon" class="sidebar-link" data-panel="sysmon">
-      <i class="fa-brands fa-windows"></i><span>Sysmon 로그</span>
-    </a>
-    <a href="#edr" class="sidebar-link" data-panel="edr">
-      <i class="fa fa-laptop-code"></i><span>EDR (AI 엔드포인트)</span>
-      <span class="badge bg-danger ms-auto" id="sidebar-edr-count">0</span>
-    </a>
-    <a href="#network" class="sidebar-link" data-panel="network">
-      <i class="fa fa-diagram-project"></i><span>네트워크 관제</span>
-      <span class="badge bg-danger ms-auto" id="sidebar-net-count">0</span>
-    </a>
+    <button class="sidebar-group" id="sgroup-head-siem" onclick="toggleGroup('siem')">
+      <i class="fa fa-server"></i><span>SIEM · 수집/탐지</span>
+      <span class="badge bg-secondary ms-auto sgroup-badge" id="sgroup-badge-siem">0</span>
+      <i class="fa fa-chevron-down sgroup-chevron"></i>
+    </button>
+    <div class="sidebar-group-body collapsed" id="sgroup-siem">
+      <a href="#siem" class="sidebar-link" data-panel="siem">
+        <i class="fa fa-server"></i><span>SIEM 이벤트</span>
+        <span class="badge bg-secondary ms-auto" id="sidebar-siem-count">0</span>
+      </a>
+      <a href="#authlog" class="sidebar-link" data-panel="authlog">
+        <i class="fa fa-key"></i><span>SSH 인증</span>
+        <span class="badge bg-secondary ms-auto" id="sidebar-auth-count">0</span>
+      </a>
+      <a href="#traffic" class="sidebar-link" data-panel="traffic">
+        <i class="fa fa-chart-line"></i><span>네트워크 트래픽</span>
+      </a>
+      <a href="#packets" class="sidebar-link" data-panel="packets">
+        <i class="fa fa-network-wired"></i><span>패킷 분석</span>
+      </a>
+      <a href="#sysmon" class="sidebar-link" data-panel="sysmon">
+        <i class="fa-brands fa-windows"></i><span>Sysmon 로그</span>
+      </a>
+      <a href="#edr" class="sidebar-link" data-panel="edr">
+        <i class="fa fa-laptop-code"></i><span>EDR (AI 엔드포인트)</span>
+        <span class="badge bg-secondary ms-auto" id="sidebar-edr-count">0</span>
+      </a>
+      <a href="#network" class="sidebar-link" data-panel="network">
+        <i class="fa fa-diagram-project"></i><span>네트워크 관제</span>
+        <span class="badge bg-secondary ms-auto" id="sidebar-net-count">0</span>
+      </a>
+    </div>
 
-    <div class="sidebar-section-label">② AI 분석</div>
-    <a href="#ml" class="sidebar-link" data-panel="ml">
-      <i class="fa fa-brain"></i><span>ML 분석·의사결정</span>
-    </a>
-    <a href="#threat-intel" class="sidebar-link" data-panel="threat-intel">
-      <i class="fa fa-virus"></i><span>위협 인텔리전스</span>
-      <span class="badge bg-danger ms-auto" id="sidebar-ti-count">0</span>
-    </a>
-    <a href="#reputation" class="sidebar-link" data-panel="reputation">
-      <i class="fa fa-user-shield"></i><span>IP 평판 (AbuseIPDB)</span>
-      <span class="badge bg-danger ms-auto" id="sidebar-rep-count">0</span>
-    </a>
-    <a href="#mitre" class="sidebar-link" data-panel="mitre">
-      <i class="fa fa-crosshairs"></i><span>MITRE ATT&amp;CK</span>
-    </a>
-    <a href="#sigma" class="sidebar-link" data-panel="sigma">
-      <i class="fa fa-file-shield"></i><span>Sigma 룰 엔진</span>
-      <span class="badge bg-danger ms-auto" id="sidebar-sigma-count">0</span>
-    </a>
+    <button class="sidebar-group" id="sgroup-head-analysis" onclick="toggleGroup('analysis')">
+      <i class="fa fa-brain"></i><span>위협 분석</span>
+      <span class="badge bg-secondary ms-auto sgroup-badge" id="sgroup-badge-analysis">0</span>
+      <i class="fa fa-chevron-down sgroup-chevron"></i>
+    </button>
+    <div class="sidebar-group-body collapsed" id="sgroup-analysis">
+      <a href="#ml" class="sidebar-link" data-panel="ml">
+        <i class="fa fa-brain"></i><span>ML 분석·의사결정</span>
+      </a>
+      <a href="#threat-intel" class="sidebar-link" data-panel="threat-intel">
+        <i class="fa fa-virus"></i><span>위협 인텔리전스</span>
+        <span class="badge bg-secondary ms-auto" id="sidebar-ti-count">0</span>
+      </a>
+      <a href="#reputation" class="sidebar-link" data-panel="reputation">
+        <i class="fa fa-user-shield"></i><span>IP 평판 (AbuseIPDB)</span>
+        <span class="badge bg-secondary ms-auto" id="sidebar-rep-count">0</span>
+      </a>
+      <a href="#mitre" class="sidebar-link" data-panel="mitre">
+        <i class="fa fa-crosshairs"></i><span>MITRE ATT&amp;CK</span>
+      </a>
+      <a href="#sigma" class="sidebar-link" data-panel="sigma">
+        <i class="fa fa-file-shield"></i><span>Sigma 룰 엔진</span>
+        <span class="badge bg-secondary ms-auto" id="sidebar-sigma-count">0</span>
+      </a>
+    </div>
 
-    <div class="sidebar-section-label">③ 자동 대응 (SOAR)</div>
-    <a href="#alerts" class="sidebar-link" data-panel="alerts">
-      <i class="fa fa-triangle-exclamation"></i><span>위협 알림</span>
-      <span class="badge bg-danger ms-auto" id="sidebar-alert-count">0</span>
-    </a>
-    <a href="#soar" class="sidebar-link" data-panel="soar">
-      <i class="fa fa-robot"></i><span>SOAR 자동대응</span>
-      <span class="badge bg-info text-dark ms-auto" id="sidebar-soar-count">0</span>
-    </a>
-    <a href="#incidents" class="sidebar-link" data-panel="incidents">
-      <i class="fa fa-folder-open"></i><span>인시던트</span>
-      <span class="badge bg-danger ms-auto" id="sidebar-inc-count">0</span>
-    </a>
-    <a href="#vulnscan" class="sidebar-link" data-panel="vulnscan">
-      <i class="fa fa-magnifying-glass-chart"></i><span>취약점 스캔 (포트/CVE)</span>
-      <span class="badge bg-danger ms-auto" id="sidebar-vuln-count">0</span>
-    </a>
-    <a href="#fuzz" class="sidebar-link" data-panel="fuzz">
-      <i class="fa fa-bug"></i><span>웹 퍼징 (견고성)</span>
-      <span class="badge bg-danger ms-auto" id="sidebar-fuzz-count">0</span>
-    </a>
-    <a href="#patch" class="sidebar-link" data-panel="patch">
-      <i class="fa fa-shield-halved"></i><span>취약점 패치 (Ansible)</span>
-      <span class="badge bg-warning text-dark ms-auto" id="sidebar-patch-count">0</span>
-    </a>
-    <a href="#purple" class="sidebar-link" data-panel="purple">
-      <i class="fa fa-flask-vial"></i><span>퍼플팀 검증</span>
-      <span class="badge bg-info text-dark ms-auto" id="sidebar-purple-cov">-</span>
-    </a>
+    <button class="sidebar-group" id="sgroup-head-soar" onclick="toggleGroup('soar')">
+      <i class="fa fa-robot"></i><span>SOAR · 대응</span>
+      <span class="badge bg-danger ms-auto sgroup-badge" id="sgroup-badge-soar">0</span>
+      <i class="fa fa-chevron-down sgroup-chevron"></i>
+    </button>
+    <div class="sidebar-group-body collapsed" id="sgroup-soar">
+      <a href="#alerts" class="sidebar-link" data-panel="alerts">
+        <i class="fa fa-triangle-exclamation"></i><span>위협 알림</span>
+        <span class="badge bg-danger ms-auto" id="sidebar-alert-count">0</span>
+      </a>
+      <a href="#soar" class="sidebar-link" data-panel="soar">
+        <i class="fa fa-robot"></i><span>SOAR 자동대응</span>
+        <span class="badge bg-info text-dark ms-auto" id="sidebar-soar-count">0</span>
+      </a>
+      <a href="#incidents" class="sidebar-link" data-panel="incidents">
+        <i class="fa fa-folder-open"></i><span>인시던트</span>
+        <span class="badge bg-danger ms-auto" id="sidebar-inc-count">0</span>
+      </a>
+    </div>
 
-    <div class="sidebar-section-label">시스템</div>
-    <a href="#report" class="sidebar-link" data-panel="report">
-      <i class="fa fa-file-lines"></i><span>일일 AI 리포트</span>
-    </a>
-    <a href="#myinfo" class="sidebar-link" data-panel="myinfo">
-      <i class="fa fa-id-card"></i><span>내 정보</span>
-    </a>
-    <a href="#notify" class="sidebar-link" data-panel="notify">
-      <i class="fa fa-bell"></i><span>푸시 알림 (ntfy)</span>
-    </a>
+    <button class="sidebar-group" id="sgroup-head-audit" onclick="toggleGroup('audit')">
+      <i class="fa fa-magnifying-glass-chart"></i><span>취약점 진단</span>
+      <span class="badge bg-secondary ms-auto sgroup-badge" id="sgroup-badge-audit">0</span>
+      <i class="fa fa-chevron-down sgroup-chevron"></i>
+    </button>
+    <div class="sidebar-group-body collapsed" id="sgroup-audit">
+      <a href="#vulnscan" class="sidebar-link" data-panel="vulnscan">
+        <i class="fa fa-magnifying-glass-chart"></i><span>취약점 스캔 (포트/CVE)</span>
+        <span class="badge bg-secondary ms-auto" id="sidebar-vuln-count">0</span>
+      </a>
+      <a href="#fuzz" class="sidebar-link" data-panel="fuzz">
+        <i class="fa fa-bug"></i><span>웹 퍼징 (견고성)</span>
+        <span class="badge bg-secondary ms-auto" id="sidebar-fuzz-count">0</span>
+      </a>
+      <a href="#patch" class="sidebar-link" data-panel="patch">
+        <i class="fa fa-shield-halved"></i><span>취약점 패치 (Ansible)</span>
+        <span class="badge bg-secondary ms-auto" id="sidebar-patch-count">0</span>
+      </a>
+      <a href="#purple" class="sidebar-link" data-panel="purple">
+        <i class="fa fa-flask-vial"></i><span>퍼플팀 검증</span>
+        <span class="badge bg-info text-dark ms-auto" id="sidebar-purple-cov">-</span>
+      </a>
+    </div>
 
-    <hr class="border-secondary mx-2"/>
-    <div class="sidebar-section-label">외부 시스템 연동 (대기)</div>
-    <a href="#firewall" class="sidebar-link disabled-link" data-panel="firewall">
-      <i class="fa fa-fire"></i><span>방화벽</span>
-      <span class="badge bg-secondary ms-auto">대기</span>
-    </a>
-    <a href="#ips" class="sidebar-link disabled-link" data-panel="ips">
-      <i class="fa fa-shield-virus"></i><span>IPS/IDS</span>
-      <span class="badge bg-secondary ms-auto">대기</span>
-    </a>
+    <button class="sidebar-group" id="sgroup-head-system" onclick="toggleGroup('system')">
+      <i class="fa fa-gear"></i><span>시스템</span>
+      <span class="badge bg-secondary ms-auto sgroup-badge d-none" id="sgroup-badge-system">0</span>
+      <i class="fa fa-chevron-down sgroup-chevron"></i>
+    </button>
+    <div class="sidebar-group-body collapsed" id="sgroup-system">
+      <a href="#report" class="sidebar-link" data-panel="report">
+        <i class="fa fa-file-lines"></i><span>일일 AI 리포트</span>
+      </a>
+      <a href="#myinfo" class="sidebar-link" data-panel="myinfo">
+        <i class="fa fa-id-card"></i><span>내 정보</span>
+      </a>
+      <a href="#notify" class="sidebar-link" data-panel="notify">
+        <i class="fa fa-bell"></i><span>푸시 알림 (ntfy)</span>
+      </a>
+    </div>
   </nav>
 
   <!-- ── MAIN CONTENT ── -->
@@ -1017,45 +1040,6 @@
             </div>
             <div id="ti-check-result" class="mt-2 small"></div>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- ════ 빈 패널들 (외부 시스템 연동) ════ -->
-    <div id="panel-firewall" class="panel-section d-none">
-      <div class="panel-title"><i class="fa fa-fire me-2 text-orange"></i>방화벽 로그</div>
-      <div class="empty-panel">
-        <i class="fa fa-fire fa-3x text-orange mb-3 opacity-50"></i>
-        <h5>방화벽 연동 대기 중</h5>
-        <p class="text-secondary">방화벽 시스템(Palo Alto, Fortinet, Cisco ASA 등)을 연결하면<br/>실시간 로그가 이곳에 표시됩니다.</p>
-        <div class="connection-info">
-          <code>API_ENDPOINT: /api/integrations/firewall</code><br/>
-          <code>지원 형식: Syslog, REST API, SNMP</code>
-        </div>
-      </div>
-    </div>
-
-    <div id="panel-ips" class="panel-section d-none">
-      <div class="panel-title"><i class="fa fa-shield-virus me-2 text-red"></i>IPS/IDS</div>
-      <div class="empty-panel">
-        <i class="fa fa-shield-virus fa-3x text-danger mb-3 opacity-50"></i>
-        <h5>IPS/IDS 연동 대기 중</h5>
-        <p class="text-secondary">Snort, Suricata, Zeek 등 IPS/IDS 시스템을 연결하면<br/>침입 탐지 이벤트가 이곳에 표시됩니다.</p>
-        <div class="connection-info">
-          <code>API_ENDPOINT: /api/integrations/ips</code><br/>
-          <code>지원 형식: Alert 로그, REST API</code>
-        </div>
-      </div>
-    </div>
-
-    <div id="panel-antivirus" class="panel-section d-none">
-      <div class="panel-title"><i class="fa fa-bug-slash me-2 text-success"></i>백신 서버</div>
-      <div class="empty-panel">
-        <i class="fa fa-bug-slash fa-3x text-success mb-3 opacity-50"></i>
-        <h5>백신 서버 연동 대기 중</h5>
-        <p class="text-secondary">중앙 백신 관리 서버(AhnLab, V3, ESET, Symantec 등)를 연결하면<br/>악성코드 탐지 현황이 이곳에 표시됩니다.</p>
-        <div class="connection-info">
-          <code>API_ENDPOINT: /api/integrations/antivirus</code>
         </div>
       </div>
     </div>

@@ -265,7 +265,8 @@ def create_app():
 
     @app.route("/api/whoami")
     def whoami():
-        return jsonify({"user": session.get("user"), "auth_enabled": auth_on})
+        return jsonify({"user": session.get("user"), "auth_enabled": auth_on,
+                        "demo": app.config.get("DEMO_MODE", True)})
 
     # ------------------------------------------------------------------ #
     #  SocketIO 이벤트

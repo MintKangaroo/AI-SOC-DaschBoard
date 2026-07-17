@@ -89,6 +89,38 @@ html, body {
 .sidebar-link.disabled-link { opacity: .5; pointer-events: none; }
 .sidebar-section-label { color: var(--text-muted); font-size: 10px; text-transform: uppercase; padding: 10px 16px 4px; letter-spacing: .08em; }
 
+/* ── Sidebar 접이식 그룹 (SOC 워크플로: 수집·탐지 → 분석 → 대응) ── */
+.sidebar-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 16px;
+  margin-top: 4px;
+  background: none;
+  border: none;
+  border-left: 3px solid transparent;
+  color: var(--text-primary);
+  font-size: 12.5px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: all .15s;
+}
+.sidebar-group i:first-child { width: 16px; text-align: center; color: var(--text-muted); }
+.sidebar-group:hover { background: var(--bg-hover); }
+.sidebar-group .sgroup-chevron {
+  width: auto;
+  font-size: 10px;
+  color: var(--text-muted);
+  transition: transform .2s;
+}
+.sidebar-group.open .sgroup-chevron { transform: rotate(180deg); }
+.sidebar-group .sgroup-badge { font-size: 10px; }
+.sidebar-group-body { overflow: hidden; }
+.sidebar-group-body.collapsed { display: none; }
+.sidebar-group-body .sidebar-link { padding-left: 30px; }
+
 /* ── Main Content ── */
 .main-content { background: var(--bg-primary); }
 
@@ -1174,6 +1206,8 @@ body::before {
   .sidebar.open { transform: translateX(0); }
   .sidebar-backdrop.show { display: block; }
   .sidebar-link { padding: 12px 18px; font-size: 14px; }   /* 터치 영역 확대 */
+  .sidebar-group { padding: 12px 18px; font-size: 14px; }
+  .sidebar-group-body .sidebar-link { padding-left: 32px; }
   .sidebar-section-label { padding: 12px 18px 4px; }
 
   /* 본문 여백 축소 */
@@ -1256,6 +1290,8 @@ body::before {
   .main-content { padding: 22px 30px !important; }
   .sidebar { width: 252px; min-width: 252px; }
   .sidebar-link { font-size: 14px; padding: 10px 20px; }
+  .sidebar-group { font-size: 14px; padding: 11px 20px; }
+  .sidebar-group-body .sidebar-link { padding-left: 34px; }
   .sidebar-section-label { font-size: 11px; padding: 14px 20px 5px; }
 
   .panel-title { font-size: 21px; margin-bottom: 18px; }
