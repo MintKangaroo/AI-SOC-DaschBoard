@@ -1,0 +1,69 @@
+    <!-- ════ IP 평판 (AbuseIPDB) 패널 ════ -->
+    <div id="panel-reputation" class="panel-section d-none">
+      <div class="panel-title">
+        <i class="fa fa-user-shield me-2 text-cyan"></i>IP 평판 조회 — AbuseIPDB
+        <span class="badge ms-2" id="rep-mode-badge" style="background:#30363d">-</span>
+        <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="loadReputation()">
+          <i class="fa fa-sync me-1"></i>새로고침
+        </button>
+      </div>
+
+      <div class="card-panel mb-3" style="border-left:3px solid var(--cyan); background:rgba(56,189,248,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-cyan me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          공격 출발지 IP가 <strong>전 세계에서 실제로 신고된 악성 IP인지</strong>를 AbuseIPDB로 조회합니다.
+          신뢰 점수(0~100)가 높을수록 진짜 위협 → <strong>정탐 판정의 객관적 근거</strong>가 되고, 알림 신뢰도에 자동 반영됩니다.
+          점수 <strong id="rep-min-score">75</strong> 이상이면 악성으로 간주. 사설·Tailscale IP는 외부 API에 노출하지 않으려 조회하지 않습니다.
+          <code id="rep-mode-note"></code>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md col-4"><div class="stat-card stat-sm border-cyan">
+          <div class="stat-value" id="rep-total">0</div><div class="stat-label">총 조회</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-danger">
+          <div class="stat-value text-danger" id="rep-malicious">0</div><div class="stat-label">악성 판정</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-purple">
+          <div class="stat-value text-purple" id="rep-api-calls">0</div><div class="stat-label">API 호출</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-success">
+          <div class="stat-value text-success" id="rep-cache-hits">0</div><div class="stat-label">캐시 적중</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-orange">
+          <div class="stat-value text-orange" id="rep-cache-size">0</div><div class="stat-label">캐시 IP</div></div></div>
+      </div>
+
+      <div class="card-panel mb-3">
+        <div class="card-panel-header"><i class="fa fa-chart-simple text-orange me-2"></i>조회된 IP 신뢰점수 분포</div>
+        <svg id="rep-bars" width="100%" height="120"></svg>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-lg-4">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-magnifying-glass text-cyan me-2"></i>수동 조회</div>
+            <div class="p-2">
+              <div class="input-group input-group-sm mb-2">
+                <input type="text" class="form-control" id="rep-check-input" placeholder="예: 45.155.205.233"
+                       onkeydown="if(event.key==='Enter')checkReputation()">
+                <button class="btn btn-outline-cyan" onclick="checkReputation()">조회</button>
+              </div>
+              <div id="rep-check-result" class="small text-muted">IP를 입력하면 AbuseIPDB 신뢰 점수를 조회합니다.</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-8">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-list text-cyan me-2"></i>최근 조회한 외부 IP</div>
+            <div class="table-responsive" style="max-height:460px; overflow-y:auto">
+              <table class="table table-dark table-sm mb-0" style="font-size:12px">
+                <thead><tr><th>시각</th><th>IP</th><th>신뢰점수</th><th>신고수</th><th>국가</th><th>출처</th></tr></thead>
+                <tbody id="rep-events-tbody">
+                  <tr><td colspan="6" class="text-muted text-center p-3">로딩 중...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>

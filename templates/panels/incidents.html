@@ -1,0 +1,86 @@
+    <!-- ════ 인시던트 (케이스 관리) 패널 ════ -->
+    <div id="panel-incidents" class="panel-section d-none">
+      <div class="panel-title">
+        <i class="fa fa-folder-open me-2 text-danger"></i>인시던트 케이스 관리
+        <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="loadIncidents()">
+          <i class="fa fa-sync me-1"></i>새로고침
+        </button>
+      </div>
+
+      <!-- 가이드 -->
+      <div class="card-panel mb-3" style="border-left:3px solid var(--red); background:rgba(248,81,73,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-red me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          알림은 이벤트, <strong>인시던트는 대응 단위</strong>입니다. SOAR가 정탐 판정한 알림은
+          (위협유형 × 출발지 대역) 케이스로 자동 승격·병합되고 차단 조치가 타임라인에 기록됩니다.
+          실무 흐름대로 <code>OPEN → INVESTIGATING → CONTAINED → RESOLVED</code> 로 관리하세요.
+        </div>
+      </div>
+
+      <!-- KPI -->
+      <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="stat-card border-danger">
+          <div class="stat-icon text-danger"><i class="fa fa-folder-open"></i></div>
+          <div class="stat-value text-danger" id="inc-active">0</div>
+          <div class="stat-label">활성 인시던트</div>
+        </div></div>
+        <div class="col-md-3"><div class="stat-card border-warning">
+          <div class="stat-icon text-warning"><i class="fa fa-magnifying-glass"></i></div>
+          <div class="stat-value text-warning" id="inc-investigating">0</div>
+          <div class="stat-label">조사 중</div>
+        </div></div>
+        <div class="col-md-3"><div class="stat-card border-cyan">
+          <div class="stat-icon text-cyan"><i class="fa fa-shield-halved"></i></div>
+          <div class="stat-value" id="inc-contained">0</div>
+          <div class="stat-label">봉쇄됨</div>
+        </div></div>
+        <div class="col-md-3"><div class="stat-card border-success">
+          <div class="stat-icon text-success"><i class="fa fa-circle-check"></i></div>
+          <div class="stat-value text-success" id="inc-resolved">0</div>
+          <div class="stat-label">해결됨</div>
+        </div></div>
+      </div>
+
+      <div class="row g-3">
+        <!-- 인시던트 목록 -->
+        <div class="col-lg-7">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-list text-danger me-2"></i>케이스 목록 (행 클릭 → 타임라인)</div>
+            <div class="table-responsive" style="max-height:560px; overflow-y:auto">
+              <table class="table table-dark table-sm table-hover mb-0" style="font-size:12px">
+                <thead><tr><th>#</th><th>제목</th><th>심각도</th><th>상태</th><th>알림</th><th>담당</th><th>최근 활동</th></tr></thead>
+                <tbody id="inc-tbody">
+                  <tr><td colspan="7" class="text-muted text-center p-3">인시던트 없음</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <!-- 상세/타임라인 -->
+        <div class="col-lg-5">
+          <div class="card-panel">
+            <div class="card-panel-header d-flex align-items-center">
+              <i class="fa fa-timeline text-warning me-2"></i><span id="inc-detail-title">케이스를 선택하세요</span>
+            </div>
+            <div id="inc-detail-controls" class="d-none p-2 border-bottom border-secondary d-flex gap-1 flex-wrap">
+              <select id="inc-status-select" class="form-select form-select-sm" style="width:auto; font-size:11px">
+                <option value="OPEN">OPEN</option>
+                <option value="INVESTIGATING">INVESTIGATING</option>
+                <option value="CONTAINED">CONTAINED</option>
+                <option value="RESOLVED">RESOLVED</option>
+              </select>
+              <input type="text" id="inc-assignee-input" class="form-control form-control-sm"
+                     placeholder="담당자" style="width:100px; font-size:11px">
+              <input type="text" id="inc-note-input" class="form-control form-control-sm flex-fill"
+                     placeholder="메모 추가" style="font-size:11px">
+              <button class="btn btn-xs btn-outline-cyan" onclick="saveIncident()">저장</button>
+            </div>
+            <div id="inc-timeline" style="max-height:460px; overflow-y:auto">
+              <div class="text-muted p-3 small">왼쪽 목록에서 인시던트를 클릭하면 타임라인이 표시됩니다.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>

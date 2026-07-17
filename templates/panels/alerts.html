@@ -1,0 +1,56 @@
+    <!-- ════ 알림 패널 ════ -->
+    <div id="panel-alerts" class="panel-section d-none">
+      <div class="panel-title"><i class="fa fa-triangle-exclamation me-2 text-danger"></i>위협 알림 관리</div>
+
+      <!-- 가이드 -->
+      <div class="card-panel mb-3" style="border-left:3px solid var(--red); background:rgba(248,81,73,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-red me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          탐지 엔진이 생성한 모든 알림을 관리합니다. <strong class="text-danger">CRITICAL → HIGH → MEDIUM</strong> 순으로 우선 처리하세요. 각 행의 <strong>AI 분석</strong> 버튼은 Claude에게 대응 권고를 받고, <strong>확인(ACK)</strong>은 조사 중, <strong>종료(CLOSED)</strong>는 처리 완료 의미입니다. 상단 필터로 심각도·상태별로 좁혀 볼 수 있고, 우측 상단 <strong>AI 트래픽 분석</strong>은 최근 전체 트래픽을 Claude에 요약 질의합니다.
+        </div>
+      </div>
+
+      <div class="row g-2 mb-3">
+        <div class="col-auto">
+          <select class="form-select form-select-sm bg-dark text-white border-secondary" id="alert-severity-filter">
+            <option value="">전체 심각도</option>
+            <option value="CRITICAL">CRITICAL</option>
+            <option value="HIGH">HIGH</option>
+            <option value="MEDIUM">MEDIUM</option>
+            <option value="LOW">LOW</option>
+          </select>
+        </div>
+        <div class="col-auto">
+          <select class="form-select form-select-sm bg-dark text-white border-secondary" id="alert-status-filter">
+            <option value="">전체 상태</option>
+            <option value="OPEN">OPEN</option>
+            <option value="ACK">확인됨</option>
+            <option value="CLOSED">종료</option>
+          </select>
+        </div>
+        <div class="col-auto d-flex align-items-center">
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" id="alert-tp-only" onchange="toggleTpOnly(this)">
+            <label class="form-check-label small" for="alert-tp-only"
+                   title="오탐 의심(저신뢰) 알림 숨기기">정탐만 보기</label>
+          </div>
+        </div>
+        <div class="col-auto ms-auto">
+          <button class="btn btn-sm btn-outline-info" onclick="analyzeTrafficAI()">
+            <i class="fa fa-robot me-1"></i>AI 트래픽 분석
+          </button>
+        </div>
+      </div>
+      <div class="card-panel p-0">
+        <table id="alerts-table" class="table table-dark table-hover table-sm mb-0">
+          <thead>
+            <tr>
+              <th>시각</th><th>심각도</th><th>유형</th><th>출발지</th><th>목적지</th><th>설명</th><th>상태</th><th>조치</th>
+            </tr>
+          </thead>
+          <tbody id="alerts-tbody"></tbody>
+        </table>
+      </div>
+    </div>

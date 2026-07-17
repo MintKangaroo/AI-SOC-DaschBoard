@@ -1,0 +1,164 @@
+    <!-- ════ ML 자체 모델 패널 ════ -->
+    <div id="panel-ml" class="panel-section d-none">
+      <div class="panel-title"><i class="fa fa-brain me-2 text-purple"></i>ML 자체 보안 AI 모델</div>
+
+      <!-- 이 패널은 어떻게 보나요? (가이드) -->
+      <div class="card-panel mb-3" style="border-left:3px solid var(--cyan); background:rgba(57,208,216,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-cyan me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          4개의 AI 모델이 <strong class="text-cyan">실시간 트래픽</strong>을 동시에 분석합니다. 아래 순서로 읽으면 됩니다.
+          <ol class="mb-0 mt-1 ps-3">
+            <li><strong class="text-purple">Random Forest (예측)</strong> — 현재 트래픽이 어떤 공격 유형일 확률이 가장 높은지. 막대가 길수록 그 공격 가능성이 큽니다. <span style="color:#e6edf3">NORMAL이 녹색이면 정상.</span></li>
+            <li><strong class="text-danger">LSTM 재구성 오차</strong> — 빨간 선(오차)이 노란 점선(임계값)을 <u>넘으면 이상</u>. 평소는 임계값 아래에서 잔잔해야 정상.</li>
+            <li><strong class="text-cyan">Isolation Forest 점수</strong> — 값이 <u>0보다 크면 정상, 0보다 작을수록 이상</u>. 급격히 떨어지면 비정상 트래픽.</li>
+            <li><strong class="text-warning">Q-Learning 임계값 배율</strong> — 오탐이 많으면 배율을 올려(둔감) / 놓치면 내려(민감) 자동 조정. <span style="color:#e6edf3">1.0x가 기본.</span></li>
+          </ol>
+          <div class="mt-2" style="font-size:11px;color:#e6edf3">
+            ⓘ 상단 <strong>IF 이상 / LSTM 이상</strong> 카운터가 갑자기 오르면 주의, 하단 <strong>ML 분석 로그</strong>에서 정/오탐 피드백을 주면 Q-Learning이 학습합니다.
+          </div>
+        </div>
+      </div>
+
+      <!-- 모델 상태 카드 -->
+      <div class="row g-3 mb-3">
+        <div class="col-sm-3">
+          <div class="stat-card border-purple">
+            <div class="stat-value text-purple" id="ml-if-anomalies">0</div>
+            <div class="stat-label">IF 이상 탐지</div>
+          </div>
+        </div>
+        <div class="col-sm-3">
+          <div class="stat-card border-cyan">
+            <div class="stat-value text-cyan" id="ml-lstm-anomalies">0</div>
+            <div class="stat-label">LSTM 이상 탐지</div>
+          </div>
+        </div>
+        <div class="col-sm-3">
+          <div class="stat-card border-warning">
+            <div class="stat-value text-warning" id="ml-rl-threshold">1.0x</div>
+            <div class="stat-label">RL 임계값 배율</div>
+          </div>
+        </div>
+        <div class="col-sm-3">
+          <div class="stat-card border-success">
+            <div class="stat-value text-success" id="ml-status-badge">초기화 중...</div>
+            <div class="stat-label">모델 상태</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-3">
+        <!-- 모델 설명 -->
+        <div class="col-lg-4">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-circle-info text-cyan me-2"></i>탑재 AI 모델</div>
+            <div class="small">
+              <div class="mb-2 p-2 rounded" style="background:rgba(57,208,216,.07);border-left:3px solid var(--cyan)">
+                <strong class="text-cyan">Isolation Forest</strong><br/>
+                <span style="color:#fff">비지도 학습 — 정상 트래픽 패턴에서 벗어난 이상 트래픽 탐지<br/>
+                오염률(contamination): 8% | 트리: 200개</span>
+              </div>
+              <div class="mb-2 p-2 rounded" style="background:rgba(157,121,242,.07);border-left:3px solid var(--purple)">
+                <strong class="text-purple">Random Forest</strong><br/>
+                <span style="color:#fff">지도 학습 — 6가지 공격 유형 분류<br/>
+                (정상, DDoS, 포트스캔, 브루트포스, 데이터유출, C2)<br/>
+                트리: 300개 | 최대깊이: 12</span>
+              </div>
+              <div class="mb-2 p-2 rounded" style="background:rgba(248,81,73,.07);border-left:3px solid var(--red)">
+                <strong class="text-danger">LSTM Autoencoder</strong><br/>
+                <span style="color:#fff">딥러닝 — 30초 시계열 트래픽 패턴 학습<br/>
+                재구성 오차로 이상 탐지<br/>
+                Encoder: LSTM(64→32) | Decoder: LSTM(32→64)</span>
+              </div>
+              <div class="p-2 rounded" style="background:rgba(227,179,65,.07);border-left:3px solid var(--yellow)">
+                <strong class="text-warning">Q-Learning Agent</strong><br/>
+                <span style="color:#fff">강화학습 — 탐지 임계값 자동 최적화<br/>
+                상태: 27가지 (트래픽·알림빈도·오탐율)<br/>
+                보상: 탐지성공 +5, 오탐 -3, 미탐지 -10</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RF 분류 확률 -->
+        <div class="col-lg-4">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-chart-bar text-purple me-2"></i>Random Forest 분류 결과</div>
+            <canvas id="rf-proba-chart" height="200"></canvas>
+            <div class="mt-2 text-center small" id="rf-verdict">-</div>
+          </div>
+        </div>
+
+        <!-- LSTM 재구성 오차 -->
+        <div class="col-lg-4">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-wave-square text-danger me-2"></i>LSTM 재구성 오차</div>
+            <canvas id="lstm-error-chart" height="200"></canvas>
+            <div class="mt-2 text-center small" id="lstm-verdict">-</div>
+          </div>
+        </div>
+
+        <!-- IF 이상탐지 점수 추이 -->
+        <div class="col-lg-6">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-chart-line text-cyan me-2"></i>Isolation Forest 이상 점수 추이</div>
+            <canvas id="if-score-chart" height="120"></canvas>
+          </div>
+        </div>
+
+        <!-- RL 임계값 추이 -->
+        <div class="col-lg-6">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-sliders text-warning me-2"></i>Q-Learning 임계값 변화 (ε: <span id="rl-epsilon">-</span>)</div>
+            <canvas id="rl-threshold-chart" height="120"></canvas>
+            <div class="mt-2 small text-center" id="rl-action-label">-</div>
+          </div>
+        </div>
+
+        <!-- ML 분석 로그 -->
+        <div class="col-12">
+          <div class="card-panel">
+            <div class="card-panel-header">
+              <i class="fa fa-list text-muted me-2"></i>ML 분석 로그
+              <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="triggerMLAnalysis()">
+                <i class="fa fa-play me-1"></i>지금 분석
+              </button>
+              <button class="btn btn-xs btn-outline-secondary ms-2" onclick="sendFeedback(false)">정탐</button>
+              <button class="btn btn-xs btn-outline-warning ms-1" onclick="sendFeedback(true)">오탐</button>
+            </div>
+            <div id="ml-log" style="max-height:250px;overflow-y:auto;font-size:11.5px;"></div>
+          </div>
+        </div>
+
+        <!-- 의사결정 지원: 유사 위협 그룹핑 + 정오탐 자동 분석 -->
+        <div class="col-12">
+          <div class="card-panel">
+            <div class="card-panel-header">
+              <i class="fa fa-sitemap text-cyan me-2"></i>ML 의사결정 지원 — 유사 위협 그룹핑 &amp; 정오탐 분석
+              <span class="badge bg-secondary ms-2" id="ds-cluster-count">0 그룹</span>
+              <span class="badge bg-warning text-dark ms-1" id="ds-verdict-count">판정 0건</span>
+              <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="loadDecisionSupport()">
+                <i class="fa fa-sync me-1"></i>새로고침
+              </button>
+            </div>
+            <div class="small text-muted px-2 pb-1" style="font-size:10.5px">
+              동일 (위협유형 × 출발지 /24) 그룹의 AI/규칙 판정을 학습해 정탐률을 추정하고,
+              그 결과가 신규 알림의 신뢰도에 자동 반영됩니다. 오탐이 반복되는 그룹은 자동으로 조용해집니다.
+            </div>
+            <div class="table-responsive" style="max-height:320px; overflow-y:auto">
+              <table class="table table-dark table-sm mb-0" style="font-size:12px">
+                <thead><tr>
+                  <th>위협 그룹</th><th>출발지 대역</th><th>건수</th><th>IP수</th>
+                  <th>심각도</th><th>정탐/오탐</th><th>정탐률</th><th>자동 추론 권고</th>
+                </tr></thead>
+                <tbody id="ds-clusters-tbody">
+                  <tr><td colspan="8" class="text-muted text-center p-3">아직 그룹 없음</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div><!-- /panel-ml -->

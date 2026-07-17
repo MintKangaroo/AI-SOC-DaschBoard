@@ -1,0 +1,23 @@
+---
+# SOC 대시보드 자동 생성 — 보안 업데이트만 패치 플레이북
+# 생성: 2026-07-17 22:12:33
+# 실행 전 반드시 검토하세요. 자동매매 서버는 점검 시간대에 적용 권장.
+- name: 서버 취약점 패치
+  hosts: targets
+  become: true
+  tasks:
+    - name: apt 캐시 갱신
+      apt:
+        update_cache: true
+    - name: 보안 업데이트만 적용 (unattended-upgrades 정책)
+      apt:
+        upgrade: dist
+        only_upgrade: true
+    - name: 재부팅 필요 여부 확인
+      stat:
+        path: /var/run/reboot-required
+      register: reboot_required
+    - name: 재부팅 필요 알림
+      debug:
+        msg: '재부팅이 필요합니다 (/var/run/reboot-required 존재)'
+      when: reboot_required.stat.exists

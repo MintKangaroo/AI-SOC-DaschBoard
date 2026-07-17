@@ -1,0 +1,75 @@
+    <!-- ════ 취약점 스캔 (포트/서비스/CVE) 패널 ════ -->
+    <div id="panel-vulnscan" class="panel-section d-none">
+      <div class="panel-title">
+        <i class="fa fa-magnifying-glass-chart me-2 text-danger"></i>취약점 스캔 — 포트 · 서비스 · CVE
+        <span class="badge ms-2" id="vuln-mode-badge" style="background:#30363d">-</span>
+        <span class="badge ms-1" id="vuln-engine-badge" style="background:#30363d">-</span>
+      </div>
+
+      <div class="card-panel mb-3" style="border-left:3px solid var(--cyan); background:rgba(56,189,248,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-cyan me-2"></i>어떻게 동작하나
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          선택 서버의 <strong>열린 TCP 포트</strong>를 찾아 <strong>서비스/버전</strong>을 식별하고, 알려진 <strong>CVE</strong>와 위험 노출을 매핑합니다.
+          <strong>connect() 스캔만 사용</strong>하는 비파괴 점검이라 운영 중 자동매매 서버에도 안전합니다.
+          <code>nmap</code>이 있으면 정밀 서비스 탐지(+vulners 설치 시 CVE)를, 없으면 파이썬 소켓 배너 스캔으로 동작합니다.
+          <code id="vuln-mode-note"></code>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md col-4"><div class="stat-card stat-sm border-cyan">
+          <div class="stat-value" id="vuln-open">0</div><div class="stat-label">열린 포트</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-orange">
+          <div class="stat-value text-orange" id="vuln-total">0</div><div class="stat-label">발견 취약점</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-danger">
+          <div class="stat-value text-danger" id="vuln-high">0</div><div class="stat-label">High 이상</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-purple">
+          <div class="stat-value text-purple" id="vuln-hosts">0</div><div class="stat-label">대상 서버</div></div></div>
+      </div>
+
+      <!-- 대상 서버 선택 -->
+      <div class="card-panel mb-3">
+        <div class="card-panel-header d-flex align-items-center">
+          <i class="fa fa-server text-cyan me-2"></i>대상 서버
+          <span class="ms-auto d-flex gap-1">
+            <button class="btn btn-xs btn-outline-secondary" onclick="vulnSelectAllHosts(true)">전체선택</button>
+            <button class="btn btn-xs btn-outline-secondary" onclick="vulnSelectAllHosts(false)">해제</button>
+          </span>
+        </div>
+        <div id="vuln-hosts-list" class="d-flex flex-wrap gap-3">
+          <span class="text-muted small">로딩 중...</span>
+        </div>
+        <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
+          <button class="btn btn-sm btn-outline-danger" id="vuln-scan-btn" onclick="vulnScan()">
+            <i class="fa fa-radar me-1"></i>선택 서버 스캔</button>
+          <span class="small text-muted" id="vuln-scan-status"></span>
+          <span class="small text-muted ms-auto" style="font-size:10.5px">
+            대상은 <code>ANSIBLE_TARGETS</code> 공유 · 포트셋은 <code>VULN_SCAN_PORTS</code>로 조정</span>
+        </div>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-lg-8">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-list-check text-danger me-2"></i>스캔 결과 (서버별 열린 포트 · CVE)</div>
+            <div id="vuln-results" style="max-height:520px; overflow-y:auto">
+              <div class="text-muted p-3 text-center">아직 스캔하지 않았습니다. 대상 선택 후 <strong>스캔</strong>을 누르세요.</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-4">
+          <div class="card-panel mb-3">
+            <div class="card-panel-header"><i class="fa fa-chart-simple text-orange me-2"></i>심각도 분포</div>
+            <svg id="vuln-sev-bars" width="100%" height="120"></svg>
+          </div>
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-clock-rotate-left text-cyan me-2"></i>스캔 이력</div>
+            <div id="vuln-history" style="max-height:220px; overflow-y:auto">
+              <div class="text-muted p-2">이력 없음</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>

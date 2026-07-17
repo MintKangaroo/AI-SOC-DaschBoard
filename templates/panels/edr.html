@@ -1,0 +1,74 @@
+    <div id="panel-edr" class="panel-section d-none">
+      <div class="panel-title">
+        <i class="fa fa-laptop-code me-2 text-info"></i>EDR — AI 기반 엔드포인트 탐지·대응
+        <span class="badge ms-2" id="edr-mode-badge" style="background:#30363d">-</span>
+        <span class="badge bg-dark ms-1" id="edr-host">-</span>
+        <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="loadEdr()">
+          <i class="fa fa-sync me-1"></i>새로고침
+        </button>
+      </div>
+
+      <div class="card-panel mb-3" style="border-left:3px solid var(--info); background:rgba(88,166,255,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-info me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          CrowdStrike Falcon 처럼 <strong>실행 중인 프로세스의 행위를 실시간 감시</strong>합니다.
+          리버스셸·웹셸·크립토 마이너·스캐너 같은 <strong>공격 지표(IOA)</strong>를 룰로 잡아 위험 점수(0~100)를 매기고,
+          HIGH/CRITICAL 탐지는 <strong>AI 트리아지(Claude)로 보내 정탐/오탐을 판정</strong>합니다.
+          위험 프로세스는 격리(종료)할 수 있고, 시스템·대시보드 자신은 안전장치로 보호됩니다.
+          <code id="edr-mode-note"></code>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md col-4"><div class="stat-card stat-sm border-cyan">
+          <div class="stat-value" id="edr-proc-count">0</div><div class="stat-label">감시 프로세스</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-danger">
+          <div class="stat-value text-danger" id="edr-critical">0</div><div class="stat-label">CRITICAL 탐지</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-orange">
+          <div class="stat-value text-orange" id="edr-high">0</div><div class="stat-label">HIGH 탐지</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-purple">
+          <div class="stat-value text-purple" id="edr-detections">0</div><div class="stat-label">총 탐지</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-success">
+          <div class="stat-value text-success" id="edr-responses">0</div><div class="stat-label">격리 대응</div></div></div>
+      </div>
+
+      <!-- Falcon 스타일 프로세스 공격 흐름도 -->
+      <div class="card-panel mb-3">
+        <div class="card-panel-header d-flex align-items-center">
+          <i class="fa fa-sitemap text-info me-2"></i>프로세스 공격 흐름 (Process Tree)
+          <span class="ms-auto small text-muted">부모 → 프로세스 → 공격지표(IOA). 색상 = 위험도</span>
+        </div>
+        <div style="overflow:auto"><svg id="edr-flow" width="100%" height="300" style="min-width:640px; display:block"></svg></div>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-lg-7">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-triangle-exclamation text-danger me-2"></i>위협 탐지 (IOA)</div>
+            <div class="table-responsive" style="max-height:480px; overflow-y:auto">
+              <table class="table table-dark table-sm mb-0" style="font-size:12px">
+                <thead><tr><th>시각</th><th>위험</th><th>프로세스</th><th>탐지 내용</th><th>MITRE</th><th></th></tr></thead>
+                <tbody id="edr-detections-tbody">
+                  <tr><td colspan="6" class="text-muted text-center p-3">로딩 중...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-5">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-list-check text-cyan me-2"></i>프로세스 위험 순위</div>
+            <div class="table-responsive" style="max-height:480px; overflow-y:auto">
+              <table class="table table-dark table-sm mb-0" style="font-size:12px">
+                <thead><tr><th>위험</th><th>PID</th><th>프로세스</th><th>사용자</th></tr></thead>
+                <tbody id="edr-proc-tbody">
+                  <tr><td colspan="4" class="text-muted text-center p-3">로딩 중...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>

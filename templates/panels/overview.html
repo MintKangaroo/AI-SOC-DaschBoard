@@ -1,0 +1,271 @@
+    <!-- ════ 개요 패널 (AI 관제 센터) ════ -->
+    <div id="panel-overview" class="panel-section">
+      <div class="panel-title d-flex align-items-center">
+        <i class="fa fa-satellite-dish me-2 text-cyan"></i>AI 관제 센터
+        <span id="threat-level-badge" class="ms-3 badge bg-success">위협 수준: LOW</span>
+        <span class="ms-auto small text-muted"><span class="live-badge">LIVE</span> <span id="overview-last-update">최종 갱신 —</span></span>
+      </div>
+
+      <!-- SOC 파이프라인 상태: 탐지 → AI 판정 → 자동 대응 → 케이스 -->
+      <div class="soc-pipeline mb-3">
+        <div class="pipe-stage clickable" onclick="showPanel('siem')">
+          <div class="pipe-icon text-cyan"><i class="fa fa-server"></i></div>
+          <div class="pipe-body">
+            <div class="pipe-label">① 수집·탐지 (SIEM)</div>
+            <div class="pipe-value"><span id="pipe-siem-total">0</span><span class="pipe-sub"> 이벤트 · 의심 <span id="pipe-siem-susp" class="text-danger">0</span></span></div>
+          </div>
+        </div>
+        <div class="pipe-arrow"><i class="fa fa-angle-right"></i></div>
+        <div class="pipe-stage clickable" onclick="showPanel('ml')">
+          <div class="pipe-icon text-purple"><i class="fa fa-brain"></i></div>
+          <div class="pipe-body">
+            <div class="pipe-label">② AI 트리아지</div>
+            <div class="pipe-value"><span id="pipe-ai-triage">0</span><span class="pipe-sub"> 판정 · 정탐 <span id="pipe-ai-tp" class="text-warning verdict-link" onclick="event.stopPropagation(); showVerdictDetail('tp')" title="정탐 상세 내역">0</span> · 오탐 <span id="pipe-ai-fp" class="text-success verdict-link" onclick="event.stopPropagation(); showVerdictDetail('fp')" title="오탐 상세 내역">0</span></span></div>
+          </div>
+        </div>
+        <div class="pipe-arrow"><i class="fa fa-angle-right"></i></div>
+        <div class="pipe-stage clickable" onclick="showPanel('soar')">
+          <div class="pipe-icon text-info"><i class="fa fa-robot"></i></div>
+          <div class="pipe-body">
+            <div class="pipe-label">③ 자동 대응 (SOAR)</div>
+            <div class="pipe-value"><span id="pipe-soar-actions">0</span><span class="pipe-sub"> 조치 · 차단 <span id="pipe-soar-blocked" class="text-danger">0</span></span></div>
+          </div>
+        </div>
+        <div class="pipe-arrow"><i class="fa fa-angle-right"></i></div>
+        <div class="pipe-stage clickable" onclick="showPanel('incidents')">
+          <div class="pipe-icon text-danger"><i class="fa fa-folder-open"></i></div>
+          <div class="pipe-body">
+            <div class="pipe-label">④ 인시던트</div>
+            <div class="pipe-value"><span id="pipe-inc-active">0</span><span class="pipe-sub"> 활성 케이스</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 메인 관제 커맨드월: 라이브 스트림 | 3D 지도 | KPI 레일 (울트라와이드 3열) -->
+      <div class="row g-3 mb-3 command-wall">
+        <div class="col-lg-5 col-xxl-4">
+          <div class="card-panel h-100 d-flex flex-column" style="min-height:490px">
+            <div class="card-panel-header">
+              <i class="fa fa-wave-square text-cyan me-2"></i>통합 라이브 이벤트 스트림
+              <span class="ms-auto d-flex gap-1">
+                <button class="btn btn-xs tp-toggle" onclick="toggleTpOnly(this)"
+                        title="오탐 의심(저신뢰) 알림 숨기기 — 정탐만 표시">
+                  <i class="fa fa-filter me-1"></i>정탐만
+                </button>
+                <span class="mx-1" style="border-left:1px solid var(--border)"></span>
+                <button class="btn btn-xs live-filter active" data-lf="all" onclick="setLiveFilter('all',this)">전체</button>
+                <button class="btn btn-xs live-filter" data-lf="alert" onclick="setLiveFilter('alert',this)">알림</button>
+                <button class="btn btn-xs live-filter" data-lf="siem" onclick="setLiveFilter('siem',this)">SIEM</button>
+                <button class="btn btn-xs live-filter" data-lf="soar" onclick="setLiveFilter('soar',this)">대응</button>
+              </span>
+            </div>
+            <div id="live-stream" class="live-stream flex-fill">
+              <div class="text-muted p-3 small text-center">이벤트 수신 대기 중…</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-7 col-xxl-5">
+          <div class="card-panel p-0 overflow-hidden h-100">
+            <div class="card-panel-header px-3 py-2">
+              <i class="fa fa-earth-asia text-cyan me-2"></i>실시간 글로벌 공격 지도 (3D)
+              <span class="ms-auto small text-muted">드래그 회전 · 휠 확대</span>
+            </div>
+            <div id="attack-globe" style="height:452px; background:radial-gradient(ellipse at center, #0b1e3a 0%, #020615 70%, #000 100%); position:relative;"></div>
+          </div>
+        </div>
+        <!-- KPI 레일: 울트라와이드에선 우측 세로, 좁은 화면에선 하단 가로 -->
+        <div class="col-12 col-xxl-3">
+          <div class="row g-2 h-100 kpi-rail">
+            <div class="col-6 col-md-2 col-xxl-6">
+              <div class="stat-card stat-sm border-danger clickable h-100" onclick="showPanel('alerts')" title="전체 알림">
+                <div class="stat-value" id="stat-total-alerts">0</div>
+                <div class="stat-label">전체 알림</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-2 col-xxl-6">
+              <div class="stat-card stat-sm border-warning clickable h-100" onclick="showPanel('alerts')" title="미처리 알림">
+                <div class="stat-value" id="stat-open-alerts">0</div>
+                <div class="stat-label">미처리</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-2 col-xxl-6">
+              <div class="stat-card stat-sm border-danger clickable h-100" onclick="filterAlerts('CRITICAL')" title="CRITICAL 알림만 보기">
+                <div class="stat-value text-danger" id="kpi-critical">0</div>
+                <div class="stat-label">CRITICAL</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-2 col-xxl-6">
+              <div class="stat-card stat-sm border-orange clickable h-100" onclick="filterAlerts('HIGH')" title="HIGH 알림만 보기">
+                <div class="stat-value text-orange" id="kpi-high">0</div>
+                <div class="stat-label">HIGH</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-2 col-xxl-6">
+              <div class="stat-card stat-sm border-cyan h-100" title="고유 공격자 IP 수">
+                <div class="stat-value text-cyan" id="kpi-unique-attackers">0</div>
+                <div class="stat-label">공격자 IP</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-2 col-xxl-6">
+              <div class="stat-card stat-sm border-purple clickable h-100" onclick="showPanel('mitre')" title="MITRE ATT&CK">
+                <div class="stat-value text-purple" id="kpi-mitre">0</div>
+                <div class="stat-label">MITRE 매핑</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 공격 로그 (지도 보조) -->
+      <div class="row g-3 mb-3">
+        <div class="col-12">
+          <div class="card-panel">
+            <div class="card-panel-header">
+              <i class="fa fa-list text-danger me-2"></i>공격 로그 (지도 궤적)
+              <span class="ms-auto small text-muted">실시간</span>
+            </div>
+            <div id="attack-log" class="attack-log-list" style="max-height:150px; overflow-y:auto"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 국가 TOP 10 + 실시간 트래픽 -->
+      <div class="row g-3 mb-3">
+        <div class="col-lg-6">
+          <div class="card-panel">
+            <div class="card-panel-header">
+              <i class="fa fa-flag text-warning me-2"></i>공격 출발국 TOP 10
+            </div>
+            <div class="chart-wrap" style="height:170px">
+              <canvas id="country-chart"></canvas>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="card-panel">
+            <div class="card-panel-header">
+              <i class="fa fa-chart-line text-cyan me-2"></i>실시간 트래픽 (pps)
+              <span class="ms-auto small text-muted">최근 60초</span>
+            </div>
+            <div class="chart-wrap" style="height:170px">
+              <canvas id="mini-traffic-chart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 분포: 프로토콜 / 심각도 / 위협유형 -->
+      <div class="row g-3 mb-3">
+        <div class="col-lg-4">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-chart-pie text-info me-2"></i>프로토콜 분포</div>
+            <div class="chart-wrap" style="height:180px"><canvas id="proto-chart"></canvas></div>
+          </div>
+        </div>
+        <div class="col-lg-4">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-chart-pie text-warning me-2"></i>알림 심각도</div>
+            <div class="chart-wrap" style="height:180px"><canvas id="severity-chart"></canvas></div>
+          </div>
+        </div>
+        <div class="col-lg-4">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-bug text-orange me-2"></i>위협 유형 분포</div>
+            <div class="chart-wrap" style="height:180px"><canvas id="threat-type-chart"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TOP 공격자 / ML 상태 / Sysmon 미니 -->
+      <div class="row g-3 mb-3">
+        <div class="col-lg-4">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-user-ninja text-danger me-2"></i>TOP 공격자 IP</div>
+            <div id="top-attackers-list" class="small" style="color:#e6edf3;"><div class="text-muted p-2">데이터 없음</div></div>
+          </div>
+        </div>
+        <div class="col-lg-4">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-brain text-cyan me-2"></i>ML 모델 상태</div>
+            <div class="ml-status-overview small p-2" style="color:#e6edf3;">
+              <div class="d-flex justify-content-between py-1">
+                <span>Isolation Forest</span>
+                <span><span class="badge bg-success me-1" id="ov-if-badge">●</span><span id="ov-if-anom">0</span>건 이상</span>
+              </div>
+              <div class="d-flex justify-content-between py-1 border-top border-secondary">
+                <span>Random Forest</span>
+                <span id="ov-rf-last" class="text-info">-</span>
+              </div>
+              <div class="d-flex justify-content-between py-1 border-top border-secondary">
+                <span>LSTM Autoencoder</span>
+                <span><span class="badge bg-success me-1" id="ov-lstm-badge">●</span><span id="ov-lstm-anom">0</span>건 이상</span>
+              </div>
+              <div class="d-flex justify-content-between py-1 border-top border-secondary">
+                <span>Q-Learning 임계값</span>
+                <span class="text-warning"><span id="ov-rl-mult">1.0</span>x</span>
+              </div>
+              <div class="mt-2">
+                <button class="btn btn-xs btn-outline-cyan w-100" onclick="showPanel('ml')">
+                  <i class="fa fa-arrow-right-long me-1"></i>ML 패널로 이동
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-4">
+          <div class="card-panel">
+            <div class="card-panel-header">
+              <i class="fa-brands fa-windows text-info me-2"></i>최근 Sysmon 이벤트
+              <button class="btn btn-xs btn-outline-secondary ms-auto" onclick="showPanel('sysmon')">전체 보기</button>
+            </div>
+            <div id="overview-sysmon-list" class="sysmon-mini-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 위협 인텔 + 최근 알림 -->
+      <div class="row g-3">
+        <div class="col-lg-5">
+          <div class="card-panel h-100">
+            <div class="card-panel-header">
+              <i class="fa fa-virus text-danger me-2"></i>위협 인텔리전스 (IoC 매칭)
+              <button class="btn btn-xs btn-outline-secondary ms-auto" onclick="showPanel('threat-intel')">전체 보기</button>
+            </div>
+            <div class="row g-2 small mb-2" style="color:#e6edf3">
+              <div class="col-4 text-center">
+                <div class="text-danger fw-bold" style="font-size:1.2rem" id="ov-ti-bad-ip">0</div>
+                <div class="text-muted">악성 IP</div>
+              </div>
+              <div class="col-4 text-center">
+                <div class="text-orange fw-bold" style="font-size:1.2rem" id="ov-ti-bad-url">0</div>
+                <div class="text-muted">악성 URL</div>
+              </div>
+              <div class="col-4 text-center">
+                <div class="text-warning fw-bold" style="font-size:1.2rem" id="ov-ti-match">0</div>
+                <div class="text-muted">매칭</div>
+              </div>
+            </div>
+            <div id="ov-ti-recent" class="small" style="max-height:180px;overflow-y:auto">
+              <div class="text-muted p-2">매칭 대기 중...</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-7">
+          <div class="card-panel h-100">
+            <div class="card-panel-header">
+              <i class="fa fa-bell text-danger me-2"></i>최근 위협 알림
+              <button class="btn btn-xs btn-outline-secondary ms-auto" onclick="showPanel('alerts')">전체 보기</button>
+            </div>
+            <div id="recent-alerts-list" class="alert-list recent-alerts-white"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 숨김: 통계만 받아오는 용도 -->
+      <span id="stat-pps" class="d-none">0</span>
+      <span id="stat-total-packets" class="d-none">0</span>
+      <span id="stat-sysmon-events" class="d-none">0</span>
+      <span id="stat-ai-analyses" class="d-none">0</span>
+      <span id="kpi-ml-anomaly" class="d-none">0</span>
+      <span id="kpi-blocked" class="d-none">0</span>
+    </div><!-- /panel-overview -->

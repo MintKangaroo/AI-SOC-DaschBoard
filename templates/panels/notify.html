@@ -1,0 +1,58 @@
+    <!-- ════ 푸시 알림 (ntfy) 패널 ════ -->
+    <div id="panel-notify" class="panel-section d-none">
+      <div class="panel-title">
+        <i class="fa fa-bell me-2 text-cyan"></i>푸시 알림 — ntfy
+        <span class="badge ms-2" id="notify-mode-badge" style="background:#30363d">-</span>
+        <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="loadNotify()">
+          <i class="fa fa-sync me-1"></i>새로고침
+        </button>
+      </div>
+
+      <div class="card-panel mb-3" style="border-left:3px solid var(--cyan); background:rgba(56,189,248,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-cyan me-2"></i>설정 방법 & 왜 이렇게?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          폰에 <strong>ntfy 앱</strong>(App Store/Play)을 설치하고 원하는 토픽을 구독한 뒤,
+          <code>.env</code>에 <code>NTFY_ENABLED=True</code>·<code>NTFY_TOPIC=&lt;토픽&gt;</code>을 넣고 재시작하면 됩니다.
+          <strong>모든 알림을 보내지 않습니다 — AI가 '정탐' 판정한 위협과 자동 차단만</strong> 폰으로 보냅니다.
+          오탐 스팸 없이 진짜 위협만 손에 들어오게 하는 것이 이 프로젝트의 핵심(정탐/오탐 구분)과 같은 철학입니다.
+          기본 임계값 <span id="notify-minsev" class="text-warning">CRITICAL</span> 이상, 동일 알림은 쿨다운으로 억제.
+          <code id="notify-mode-note"></code>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md col-4"><div class="stat-card stat-sm border-success">
+          <div class="stat-value text-success" id="notify-sent">0</div><div class="stat-label">전송</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-orange">
+          <div class="stat-value text-orange" id="notify-suppressed">0</div><div class="stat-label">쿨다운 억제</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-danger">
+          <div class="stat-value text-danger" id="notify-failed">0</div><div class="stat-label">실패</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-cyan">
+          <div class="stat-value" id="notify-server" style="font-size:13px">-</div><div class="stat-label">서버</div></div></div>
+      </div>
+
+      <div class="card-panel mb-3">
+        <div class="card-panel-header"><i class="fa fa-chart-simple text-cyan me-2"></i>알림 전송 현황</div>
+        <svg id="notify-bars" width="100%" height="96"></svg>
+      </div>
+
+      <div class="mb-3">
+        <button class="btn btn-sm btn-outline-cyan" onclick="notifyTest()">
+          <i class="fa fa-paper-plane me-1"></i>테스트 알림 보내기</button>
+        <span id="notify-test-result" class="small ms-2 text-muted"></span>
+      </div>
+
+      <div class="card-panel">
+        <div class="card-panel-header"><i class="fa fa-clock-rotate-left text-cyan me-2"></i>알림 이력</div>
+        <div class="table-responsive" style="max-height:420px; overflow-y:auto">
+          <table class="table table-dark table-sm mb-0" style="font-size:12px">
+            <thead><tr><th>시각</th><th>심각도</th><th>제목</th><th>전송</th></tr></thead>
+            <tbody id="notify-hist-tbody">
+              <tr><td colspan="4" class="text-muted text-center p-3">이력 없음</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
