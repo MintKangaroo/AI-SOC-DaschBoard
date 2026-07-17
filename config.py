@@ -1,0 +1,105 @@
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
+
+class Config:
+    SECRET_KEY = os.getenv("SECRET_KEY", "soc-dashboard-secret-2024")
+    DEBUG = os.getenv("DEBUG", "False") == "True"
+    HOST = os.getenv("HOST", "127.0.0.1")
+    PORT = int(os.getenv("PORT", 8080))
+
+    # Packet capture settings
+    CAPTURE_INTERFACE = os.getenv("CAPTURE_INTERFACE", None)  # None = auto-detect
+    CAPTURE_TIMEOUT = int(os.getenv("CAPTURE_TIMEOUT", 30))
+    MAX_PACKETS_DISPLAY = int(os.getenv("MAX_PACKETS_DISPLAY", 200))
+
+    # DDoS detection thresholds
+    DDOS_PACKET_THRESHOLD = int(os.getenv("DDOS_PACKET_THRESHOLD", 1000))  # packets/sec per IP
+    DDOS_BYTE_THRESHOLD = int(os.getenv("DDOS_BYTE_THRESHOLD", 10_000_000))  # bytes/sec
+    PORT_SCAN_THRESHOLD = int(os.getenv("PORT_SCAN_THRESHOLD", 20))  # unique ports/sec
+    # 정탐 신뢰도 임계값 (0~1) — 미만 알림은 '오탐 의심'으로 저장만 하고 실시간 표시 억제
+    ALERT_CONFIDENCE_THRESHOLD = float(os.getenv("ALERT_CONFIDENCE_THRESHOLD", 0.5))
+
+    # Sysmon log path (Windows)
+    SYSMON_LOG_CHANNEL = os.getenv("SYSMON_LOG_CHANNEL", "Microsoft-Windows-Sysmon/Operational")
+    WINDOWS_EVENT_LOG_MAX = int(os.getenv("WINDOWS_EVENT_LOG_MAX", 100))
+
+    # Known malicious hash lists path
+    MALICIOUS_HASH_DB = os.getenv("MALICIOUS_HASH_DB", "data/malicious_hashes.txt")
+
+    # SIEM 접근 로그 소스 — "이름=경로;이름=경로" (비우면 기본 자동매매 KR/USA 로그)
+    SIEM_ACCESS_LOGS = os.getenv("SIEM_ACCESS_LOGS", "")
+
+    # SSH 인증 로그 실시간 탐지
+    AUTH_LOG_PATH = os.getenv("AUTH_LOG_PATH", "/var/log/auth.log")
+    SSH_BRUTE_THRESHOLD = int(os.getenv("SSH_BRUTE_THRESHOLD", 5))   # 실패 횟수
+    SSH_BRUTE_WINDOW = float(os.getenv("SSH_BRUTE_WINDOW", 120))      # 집계 구간(초)
+
+    # IP 평판 조회 (AbuseIPDB) — 공격 IP 실제 위험도로 정탐/오탐 근거 강화
+    ABUSEIPDB_API_KEY = os.getenv("ABUSEIPDB_API_KEY", "")   # 없으면 데모 점수 fallback
+    ABUSEIPDB_CACHE_HOURS = float(os.getenv("ABUSEIPDB_CACHE_HOURS", 6))
+    ABUSEIPDB_MIN_SCORE = int(os.getenv("ABUSEIPDB_MIN_SCORE", 75))  # 이 점수↑ = 악성
+
+    # EDR (엔드포인트 탐지·대응) — AI 기반 프로세스 행위 관제
+    EDR_SCAN_INTERVAL = float(os.getenv("EDR_SCAN_INTERVAL", 5))
+    EDR_RESPONSE_MODE = os.getenv("EDR_RESPONSE_MODE", "simulate")  # simulate | kill
+    EDR_HOST_LABEL = os.getenv("EDR_HOST_LABEL", "")
+
+    # 네트워크 모니터링 관제
+    NET_MONITOR_INTERVAL = float(os.getenv("NET_MONITOR_INTERVAL", 5))
+    # 감시 대상 서비스: "이름=host:port;이름2=host:port" (비우면 대시보드 자체만 점검)
+    NET_MONITOR_TARGETS = os.getenv("NET_MONITOR_TARGETS", "")
+
+    # Sigma 룰 엔진 (업계 표준 탐지룰)
+    SIGMA_RULES_DIR = os.getenv("SIGMA_RULES_DIR", "data/sigma")
+
+    # 일일 AI 리포트
+    REPORT_HOUR = int(os.getenv("REPORT_HOUR", 8))     # 매일 자동 생성 시각(0~23)
+    REPORT_DIR = os.getenv("REPORT_DIR", "data/reports")
+
+    # 자동화 취약점 패치 (Ansible)
+    PATCH_APPLY_ENABLED = os.getenv("PATCH_APPLY_ENABLED", "False")  # 실제 적용 허용 여부
+    PATCH_PLAYBOOK_DIR = os.getenv("PATCH_PLAYBOOK_DIR", "data/ansible")
+    ANSIBLE_TARGETS = os.getenv("ANSIBLE_TARGETS", "")  # 일괄 명령/패치 원격 대상 "이름=user@host;..."
+
+    # 취약점 스캐너 (포트/서비스/CVE) — 대상은 ANSIBLE_TARGETS 공유
+    VULN_SCAN_PORTS = os.getenv("VULN_SCAN_PORTS", "")  # "22,80,443" (비우면 기본 포트셋)
+
+    # 웹 엔드포인트 퍼저 (견고성 점검) — 본인 소유 서버만
+    FUZZ_TARGETS = os.getenv("FUZZ_TARGETS", "")          # "이름=host:port;..." (비우면 NET_MONITOR_TARGETS)
+    FUZZ_RATE = float(os.getenv("FUZZ_RATE", 5))          # req/s (부하 억제)
+    FUZZ_MAX_REQUESTS = int(os.getenv("FUZZ_MAX_REQUESTS", 300))
+    FUZZ_TIMEOUT = float(os.getenv("FUZZ_TIMEOUT", 5))
+    FUZZ_ALLOW_WRITE = os.getenv("FUZZ_ALLOW_WRITE", "False")  # POST 등 쓰기 메서드 허용 여부
+
+    # 푸시 알림 (ntfy) — 정탐/CRITICAL만 폰으로
+    NTFY_ENABLED = os.getenv("NTFY_ENABLED", "False")
+    NTFY_SERVER = os.getenv("NTFY_SERVER", "https://ntfy.sh")
+    NTFY_TOPIC = os.getenv("NTFY_TOPIC", "")          # 폰 ntfy 앱에서 구독할 토픽
+    NTFY_TOKEN = os.getenv("NTFY_TOKEN", "")          # 인증 서버용(선택)
+    NTFY_MIN_SEVERITY = os.getenv("NTFY_MIN_SEVERITY", "CRITICAL")
+    NTFY_COOLDOWN = float(os.getenv("NTFY_COOLDOWN", 300))
+
+    # SOAR 자동 대응 설정
+    SOAR_BLOCK_MODE = os.getenv("SOAR_BLOCK_MODE", "simulate")  # simulate | ufw | iptables
+    SOAR_AUTO_BLOCK = os.getenv("SOAR_AUTO_BLOCK", "True")
+    # 차단 자동 만료 (시간) — 0 이면 영구 차단
+    SOAR_BLOCK_TTL_HOURS = float(os.getenv("SOAR_BLOCK_TTL_HOURS", 24))
+    # 절대 차단 금지 IP/대역 (쉼표 구분, 대역은 "1.2.3." 형태 접두). 사설·Tailscale은 자동 보호
+    SOAR_BLOCK_ALLOWLIST = os.getenv("SOAR_BLOCK_ALLOWLIST", "")
+
+    # ── 대시보드 인증 ──
+    AUTH_ENABLED = os.getenv("AUTH_ENABLED", "True") == "True"
+    DASH_USERNAME = os.getenv("DASH_USERNAME", "admin")
+    DASH_PASSWORD = os.getenv("DASH_PASSWORD", "")            # 평문(편의) — 시작 시 해시로 변환
+    DASH_PASSWORD_HASH = os.getenv("DASH_PASSWORD_HASH", "")  # pbkdf2 해시(권장)
+    SESSION_HOURS = float(os.getenv("SESSION_HOURS", 12))     # 로그인 세션 유지 시간
+    # 세션 쿠키 보안 (Tailscale는 HTTP라 Secure 플래그는 기본 off)
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
+    SESSION_COOKIE_SECURE = os.getenv("SESSION_COOKIE_SECURE", "False") == "True"
+
+    # Demo mode (use simulated data when real sources unavailable)
+    DEMO_MODE = os.getenv("DEMO_MODE", "True") == "True"
+    DEMO_UPDATE_INTERVAL = float(os.getenv("DEMO_UPDATE_INTERVAL", 2.0))

@@ -1,0 +1,17 @@
+title: Network Scanner Execution
+id: 7c2e2b6a-1f3a-4c11-9d21-aa11bb22cc05
+status: experimental
+description: nmap/masscan 등 스캐너 실행
+level: medium
+logsource:
+  product: linux
+  category: process_creation
+tags:
+  - attack.discovery
+  - attack.t1046
+detection:
+  selection:
+    Image|endswith:
+      - '/nmap'
+      - '/masscan'
+  condition: selection

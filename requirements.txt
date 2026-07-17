@@ -1,0 +1,26 @@
+# 핵심
+flask==3.0.3
+flask-socketio==5.3.6
+flask-cors==4.0.1
+python-dotenv==1.0.1
+requests==2.32.3
+psutil==6.0.0
+python-dateutil==2.9.0
+anthropic==0.40.0
+
+# 패킷 캡처 (실환경 전용 — 데모 모드는 없어도 동작)
+pyshark==0.6
+scapy==2.5.0
+
+# ML
+scikit-learn==1.5.2
+numpy==1.26.4
+joblib==1.4.2
+
+# ── 선택 사항 (필요 시 주석 해제) ──
+# LSTM Autoencoder 사용 시 (용량 큼)
+# tensorflow==2.17.0
+# keras==3.5.0
+# 개발/보안 점검 도구
+# bandit==1.7.9
+PyYAML==6.0.3

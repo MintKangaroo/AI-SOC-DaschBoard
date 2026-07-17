@@ -1,0 +1,395 @@
+"""
+신규 관제 기능 단위 테스트 — 취약점 스캐너 / 웹 퍼저 / Ansible 다중서버
+실행: ./venv/bin/pytest tests/test_scanners.py -v
+
+네트워크 요청·실제 ansible 실행 없이 파싱·판정·안전장치 로직만 검증한다.
+"""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from modules.vuln_scanner import VulnScanner, _parse_ver, _ver_lt
+from modules.web_fuzzer import WebFuzzer, PAYLOADS
+from modules.patch_manager import PatchManager
+
+
+class FakeSocketIO:
+    def __init__(self):
+        self.emitted = []
+
+    def emit(self, event, data=None, **kwargs):
+        self.emitted.append((event, data))
+
+
+def make_vs(config=None):
+    return VulnScanner(FakeSocketIO(), config=config or {})
+
+
+def make_fuzzer(config=None):
+    return WebFuzzer(FakeSocketIO(), config=config or {})
+
+
+def make_pm(config=None):
+    return PatchManager(FakeSocketIO(), config=config or {})
+
+
+# ══════════════════ vuln_scanner: 버전 비교 ══════════════════
+
+def test_parse_ver():
+    assert _parse_ver("8.9p1") == (8, 9, 1)
+    assert _parse_ver("1:8.9p1-3ubuntu0.16") == (1, 8, 9, 1)
+
+
+def test_ver_lt():
+    assert _ver_lt((8, 9, 1), (9, 8)) is True
+    assert _ver_lt((9, 8), (9, 8)) is False
+    assert _ver_lt((1, 21, 0), (1, 21, 0)) is False
+    assert _ver_lt((1, 18), (1, 21)) is True
+
+
+# ══════════════════ vuln_scanner: 배너 휴리스틱 CVE ══════════════════
+
+def test_match_cves_openssh_regresshion():
+    vs = make_vs()
+    cves = vs._match_cves("OpenSSH 8.9p1 Ubuntu")
+    ids = " ".join(c["cve"] for c in cves)
+    assert "CVE-2024-6387" in ids
+
+
+def test_match_cves_nginx_space_format():
+    # nmap 은 'nginx 1.18.0' (공백) 형식 → 슬래시/공백 모두 매칭돼야
+    vs = make_vs()
+    cves = vs._match_cves("http nginx 1.18.0")
+    assert any(c["cve"] == "CVE-2021-23017" for c in cves)
+
+
+def test_match_cves_patched_version_none():
+    vs = make_vs()
+    # OpenSSH 9.9 → 9.8 미만 아님 → regreSSHion 미매칭
+    assert vs._match_cves("OpenSSH 9.9p1") == []
+
+
+# ══════════════════ vuln_scanner: CVE 중복 제거 ══════════════════
+
+def test_dedup_cves_merges_by_number():
+    vs = make_vs()
+    dup = [
+        {"cve": "CVE-2024-6387 (regreSSHion)", "severity": "high", "desc": "a"},
+        {"cve": "CVE-2024-6387", "severity": "medium", "desc": "b"},
+        {"cve": "CVE-2023-38408", "severity": "critical", "desc": "c"},
+    ]
+    out = vs._dedup_cves(dup)
+    assert len(out) == 2
+    # 최고 심각도 유지 + critical 먼저 정렬
+    assert out[0]["cve"] == "CVE-2023-38408"
+    merged = [c for c in out if "6387" in c["cve"]][0]
+    assert merged["severity"] == "high"
+
+
+# ══════════════════ vuln_scanner: nmap XML 파싱 ══════════════════
+
+_NMAP_XML = """<?xml version="1.0"?>
+<nmaprun><host><ports>
+<port protocol="tcp" portid="22">
+  <state state="open"/>
+  <service name="ssh" product="OpenSSH" version="8.9p1"/>
+  <script id="vulners" output="CVE-2023-38408 9.8 https://vulners.com/a CVE-2023-38408 9.8 https://vulners.com/dup CVE-2020-9999 999.0 https://vulners.com/bad"/>
+</port>
+<port protocol="tcp" portid="3306">
+  <state state="closed"/>
+  <service name="mysql"/>
+</port>
+</ports></host></nmaprun>"""
+
+
+def test_parse_nmap_xml_sanitizes_and_dedups():
+    vs = make_vs()
+    ports = vs._parse_nmap_xml(_NMAP_XML)
+    assert len(ports) == 1                    # closed 포트는 제외
+    p = ports[0]
+    assert p["port"] == 22
+    ids = [c["cve"] for c in p["cves"]]
+    # 중복 CVE-2023-38408 은 1개로, CVSS 999(이상값)는 제외
+    assert ids.count("CVE-2023-38408") == 1
+    assert "CVE-2020-9999" not in ids
+    # 배너 휴리스틱으로 regreSSHion 도 보강
+    assert "CVE-2024-6387" in " ".join(ids)
+
+
+def test_parse_nmap_xml_bad_input():
+    vs = make_vs()
+    assert vs._parse_nmap_xml("<not-xml") is None
+
+
+# ══════════════════ vuln_scanner: 서비스→패키지, 심각도 ══════════════════
+
+def test_service_to_pkg():
+    vs = make_vs()
+    assert vs._service_to_pkg({"service": "ssh", "version": "OpenSSH 8.9p1"}) == "openssh-server"
+    assert vs._service_to_pkg({"service": "http", "version": "nginx 1.18.0"}) == "nginx"
+    assert vs._service_to_pkg({"service": "unknown", "version": ""}) is None
+
+
+def test_port_severity_rank():
+    vs = make_vs()
+    assert vs._port_severity([{"severity": "medium"}], [{"severity": "critical"}]) == "critical"
+    assert vs._port_severity([{"severity": "high"}], []) == "high"
+    assert vs._port_severity([], []) == "info"
+
+
+# ══════════════════ vuln_scanner: 교차검증 판정 ══════════════════
+
+def test_verdict_vulnerable_when_upgradable():
+    vs = make_vs()
+    v = vs._verdict_for("openssh-server", "1:8.9p1-3ubuntu0.7",
+                        {"openssh-server": "1:8.9p1-3ubuntu0.16"})
+    assert v["state"] == "vulnerable"
+    assert v["candidate"] == "1:8.9p1-3ubuntu0.16"
+
+
+def test_verdict_patched_when_backport_and_no_update():
+    vs = make_vs()
+    v = vs._verdict_for("nginx", "1.18.0-6ubuntu14.16", {})
+    assert v["state"] == "patched"
+
+
+def test_verdict_unknown_when_not_installed():
+    vs = make_vs()
+    v = vs._verdict_for("redis-server", None, {})
+    assert v["state"] == "unknown"
+
+
+def test_verdict_remote_note_marks_source():
+    vs = make_vs()
+    v = vs._verdict_for("nginx", "1.18.0-6ubuntu14.16", {}, remote=True)
+    assert "원격" in v["note"]
+
+
+# ══════════════════ vuln_scanner: apt 파싱 ══════════════════
+
+def test_parse_upgradable():
+    vs = make_vs()
+    out = vs._parse_upgradable(
+        "Listing...\n"
+        "openssh-server/jammy-security 1:8.9p1-3ubuntu0.18 amd64 [upgradable from: 1:8.9p1-3ubuntu0.16]\n"
+        "curl/jammy-security 7.81.0-1ubuntu1.20 amd64 [upgradable from: 7.81.0-1ubuntu1.15]\n"
+    )
+    assert out["openssh-server"] == "1:8.9p1-3ubuntu0.18"
+    assert out["curl"] == "7.81.0-1ubuntu1.20"
+
+
+def test_parse_remote_apt_marker_split():
+    vs = make_vs()
+    output = (
+        "host | CHANGED | rc=0 >>\n"
+        "nginx/jammy 1.18.0-6ubuntu14.17 amd64 [upgradable from: 1.18.0-6ubuntu14.16]\n"
+        "===INSTALLED===\n"
+        "openssh-server 1:8.9p1-3ubuntu0.16\n"
+        "nginx 1.18.0-6ubuntu14.16\n"
+    )
+    res = vs._parse_remote_apt(output)
+    assert res is not None
+    upgradable, installed = res
+    assert upgradable.get("nginx") == "1.18.0-6ubuntu14.17"
+    assert installed.get("openssh-server") == "1:8.9p1-3ubuntu0.16"
+    assert installed.get("nginx") == "1.18.0-6ubuntu14.16"
+
+
+def test_parse_remote_apt_no_marker_returns_none():
+    vs = make_vs()
+    assert vs._parse_remote_apt("연결 실패 출력") is None
+
+
+# ══════════════════ vuln_scanner: 인벤토리 / 데모 ══════════════════
+
+def test_write_inventory_local_and_remote():
+    vs = make_vs()
+    # localhost → local connection
+    p1 = vs._write_inventory({"id": "localhost", "addr": "localhost", "conn": "local"})
+    txt1 = open(p1).read(); os.remove(p1)
+    assert "ansible_connection=local" in txt1
+    # user@host → ssh
+    p2 = vs._write_inventory({"id": "deploy@10.0.0.11", "addr": "10.0.0.11", "conn": "ssh"})
+    txt2 = open(p2).read(); os.remove(p2)
+    assert "10.0.0.11" in txt2 and "ansible_user=deploy" in txt2
+
+
+def test_load_ports_custom():
+    vs = make_vs({"VULN_SCAN_PORTS": "22, 80, 443"})
+    assert vs.ports == [22, 80, 443]
+
+
+def test_demo_ports_flagged():
+    vs = make_vs()
+    ports = vs._demo_ports({"conn": "local", "name": "t", "addr": "127.0.0.1"})
+    assert ports and all(p.get("demo") for p in ports)
+
+
+# ══════════════════ web_fuzzer: 사설 대상 판별 ══════════════════
+
+def test_is_private_host():
+    wf = make_fuzzer()
+    assert wf._is_private_host("http://127.0.0.1:5055") is True
+    assert wf._is_private_host("http://localhost:8080") is True
+    assert wf._is_private_host("http://10.0.0.11") is True
+    assert wf._is_private_host("http://192.168.1.5") is True
+    assert wf._is_private_host("http://100.64.140.27:5055") is True   # Tailscale/CGNAT
+    assert wf._is_private_host("http://8.8.8.8") is False             # 공인
+    assert wf._is_private_host("http://1.1.1.1:80") is False
+
+
+# ══════════════════ web_fuzzer: URL 조립 ══════════════════
+
+def test_build_url_appends_query():
+    wf = make_fuzzer()
+    u = wf._build_url("http://127.0.0.1/x", "q", "a b")
+    assert u.startswith("http://127.0.0.1/x?q=")
+    assert "%20" in u or "+" in u or "a%20b" in u
+
+
+def test_build_url_uses_amp_when_query_exists():
+    wf = make_fuzzer()
+    u = wf._build_url("http://127.0.0.1/x?a=1", "q", "z")
+    assert "&q=z" in u
+
+
+# ══════════════════ web_fuzzer: 응답 분류 ══════════════════
+
+def _target():
+    return {"name": "t"}
+
+
+def test_classify_server_error():
+    wf = make_fuzzer()
+    r = {"status": 500, "elapsed": 0.01, "text": "", "error": None}
+    f = wf._classify(_target(), "/", "q", "overflow", "A" * 10, "u", r, {"elapsed": 0.01})
+    assert f["type"] == "server_error" and f["severity"] == "high"
+
+
+def test_classify_timeout():
+    wf = make_fuzzer()
+    r = {"status": None, "elapsed": 5, "text": "", "error": "timeout"}
+    f = wf._classify(_target(), "/", "q", "empty", "", "u", r, {"elapsed": 0.01})
+    assert f["type"] == "timeout" and f["severity"] == "high"
+
+
+def test_classify_reflection_xss():
+    wf = make_fuzzer()
+    payload = "<script>alert(1)</script>"
+    r = {"status": 200, "elapsed": 0.01, "text": "hi " + payload + " bye", "error": None}
+    f = wf._classify(_target(), "/", "q", "xss", payload, "u", r, {"elapsed": 0.01})
+    assert f["type"] == "reflection" and f["severity"] == "medium"
+
+
+def test_classify_latency_spike():
+    wf = make_fuzzer()
+    r = {"status": 200, "elapsed": 3.0, "text": "ok", "error": None}
+    f = wf._classify(_target(), "/", "q", "empty", "", "u", r, {"elapsed": 0.01})
+    assert f["type"] == "latency"
+
+
+def test_classify_ok_returns_none():
+    wf = make_fuzzer()
+    r = {"status": 200, "elapsed": 0.02, "text": "ok", "error": None}
+    assert wf._classify(_target(), "/", "q", "empty", "", "u", r, {"elapsed": 0.02}) is None
+
+
+# ══════════════════ web_fuzzer: 대상 로드 & 실행 게이트 ══════════════════
+
+def test_load_targets_includes_self_and_netmon():
+    wf = make_fuzzer({"PORT": 5055, "NET_MONITOR_TARGETS": "KR=127.0.0.1:5050"})
+    names = [t["name"] for t in wf.targets]
+    assert "이 SOC 대시보드" in names
+    assert any(t["hostport"] == "127.0.0.1:5050" for t in wf.targets)
+
+
+def test_run_unknown_target():
+    wf = make_fuzzer()
+    assert wf.run(target_id="nope")["status"] == "error"
+
+
+def test_run_blocks_public_target():
+    wf = make_fuzzer({"FUZZ_TARGETS": "pub=8.8.8.8:80"})
+    res = wf.run(target_id="8.8.8.8:80")
+    assert res["status"] == "blocked"
+    assert wf._fuzzing is False        # 스레드 시작 안 함
+
+
+def test_run_blocks_post_without_allow_write():
+    wf = make_fuzzer()                 # FUZZ_ALLOW_WRITE 기본 False
+    res = wf.run(target_id="self", method="POST")
+    assert res["status"] == "blocked"
+    assert wf._fuzzing is False
+
+
+def test_payloads_nonempty():
+    assert len(PAYLOADS) > 10
+    labels = [lbl for lbl, _ in PAYLOADS]
+    assert "xss" in labels and "path_traversal" in labels
+
+
+# ══════════════════ patch_manager: 다중 호스트 인벤토리 ══════════════════
+
+def test_load_hosts_localhost_plus_remote():
+    pm = make_pm({"ANSIBLE_TARGETS": "KR 자동매매=deploy@10.0.0.11;USA=deploy@10.0.0.12"})
+    ids = [h["id"] for h in pm.hosts]
+    assert "localhost" in ids
+    assert "deploy@10.0.0.11" in ids and "deploy@10.0.0.12" in ids
+
+
+def test_hosts_by_id_defaults_localhost():
+    pm = make_pm()
+    sel = pm._hosts_by_id(None)
+    assert len(sel) == 1 and sel[0]["conn"] == "local"
+
+
+def test_write_inventory_remote_user_host():
+    pm = make_pm({"ANSIBLE_TARGETS": "KR=deploy@10.0.0.11"})
+    remote = [h for h in pm.hosts if h["conn"] == "ssh"][0]
+    path = pm._write_inventory([remote])
+    txt = open(path).read(); os.remove(path)
+    assert "[targets]" in txt and "ansible_user=deploy" in txt and "10.0.0.11" in txt
+
+
+# ══════════════════ patch_manager: 안전장치 ══════════════════
+
+def test_run_command_empty_blocked():
+    pm = make_pm()
+    job = pm.run_command("", host_ids=["localhost"], mode="check")
+    assert job["status"] == "blocked"
+
+
+def test_run_command_check_is_preview_only():
+    pm = make_pm()
+    job = pm.run_command("uptime", host_ids=["localhost"], mode="check")
+    assert job["status"] == "simulated"       # 실행 안 하고 미리보기만
+    assert "미리보기" in job["log"]
+
+
+def test_run_command_apply_blocked_without_gate():
+    pm = make_pm({"PATCH_APPLY_ENABLED": "False"})
+    job = pm.run_command("uptime", host_ids=["localhost"], mode="apply")
+    assert job["status"] == "blocked"
+    assert "PATCH_APPLY_ENABLED" in job["result"]
+
+
+def test_run_command_dangerous_blocked_even_with_gate():
+    pm = make_pm({"PATCH_APPLY_ENABLED": "True"})
+    for danger in ("rm -rf /", "reboot", "mkfs.ext4 /dev/sda", "shutdown now"):
+        job = pm.run_command(danger, host_ids=["localhost"], mode="apply")
+        assert job["status"] == "blocked", danger
+        assert "파괴적" in job["result"]
+
+
+def test_run_job_apply_blocked_without_gate():
+    pm = make_pm({"PATCH_APPLY_ENABLED": "False"})
+    job = pm.run_job(mode="apply", security_only=True, host_ids=["localhost"])
+    assert job["status"] == "blocked"
+
+
+def test_render_playbook_targets_group():
+    pm = make_pm()
+    content = pm._render_playbook(["openssh-server"], security_only=True)
+    assert "hosts: targets" in content
+    assert "openssh-server" in content

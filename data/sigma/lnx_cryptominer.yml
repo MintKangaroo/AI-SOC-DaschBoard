@@ -1,0 +1,22 @@
+title: Cryptominer Execution
+id: 7c2e2b6a-1f3a-4c11-9d21-aa11bb22cc04
+status: stable
+description: xmrig/minerd 등 크립토 마이너 실행 또는 마이닝 풀 접속
+level: high
+logsource:
+  product: linux
+  category: process_creation
+tags:
+  - attack.impact
+  - attack.t1496
+detection:
+  selection_bin:
+    Image|contains:
+      - 'xmrig'
+      - 'minerd'
+  selection_pool:
+    CommandLine|contains:
+      - 'pool'
+      - 'stratum+tcp'
+      - 'minexmr'
+  condition: selection_bin or selection_pool

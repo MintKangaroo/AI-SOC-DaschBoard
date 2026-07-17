@@ -1,0 +1,19 @@
+# 악성 해시 데이터베이스
+# 형식: algorithm,hash,description
+# 알고리즘: md5, sha1, sha256
+#
+# EICAR 테스트 파일 (안티바이러스 테스트용)
+md5,44d88612fea8a8f36de82e1278abb02f,EICAR Test File
+sha256,275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f,EICAR Test File
+sha1,3395856ce81f2b7382dee72602f798b642f14d0,EICAR Test File
+
+# Mimikatz (자격증명 덤프 도구)
+sha256,92be76e0b8d1b48e89bc2d9c78e99e8ca3e5ee6eaa7a4e7a1f1f8b53f1c9a5c2,Mimikatz v2.x
+md5,e6dc536c37cdedbb9e8b4c51ce8b8fec,Mimikatz Credential Dumper
+
+# WannaCry 랜섬웨어
+sha256,ed01ebfbc9eb5bbea545af4d01bf5f1071661840480439c6e5babe8e080e41aa,WannaCry Ransomware
+md5,84c82835a5d21bbcf75a61706d8ab549,WannaCry Ransomware
+
+# NotPetya 랜섬웨어
+sha256,027cc450ef5f8c5f653329641ec1fed91f694e0d229928963b30f6b0d7d3a745,NotPetya/ExPetr

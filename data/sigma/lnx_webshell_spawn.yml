@@ -1,0 +1,24 @@
+title: Web Server Spawning Shell (Webshell)
+id: 7c2e2b6a-1f3a-4c11-9d21-aa11bb22cc03
+status: stable
+description: nginx/apache/php 가 셸을 자식으로 실행 — 웹셸/RCE 의심
+level: critical
+logsource:
+  product: linux
+  category: process_creation
+tags:
+  - attack.persistence
+  - attack.t1505.003
+detection:
+  selection_parent:
+    ParentImage|endswith:
+      - 'nginx'
+      - 'apache2'
+      - 'httpd'
+      - 'php-fpm'
+  selection_shell:
+    Image|endswith:
+      - '/bash'
+      - '/sh'
+      - '/dash'
+  condition: selection_parent and selection_shell

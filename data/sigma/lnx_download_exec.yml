@@ -1,0 +1,23 @@
+title: Linux Download and Execute (curl/wget pipe to shell)
+id: 7c2e2b6a-1f3a-4c11-9d21-aa11bb22cc02
+status: stable
+description: curl/wget 로 받아 바로 셸로 파이프하는 다운로드-실행
+level: high
+logsource:
+  product: linux
+  category: process_creation
+tags:
+  - attack.command_and_control
+  - attack.t1105
+detection:
+  selection_tool:
+    CommandLine|contains:
+      - 'curl '
+      - 'wget '
+  selection_pipe:
+    CommandLine|contains:
+      - '| bash'
+      - '| sh'
+      - '|bash'
+      - '|sh'
+  condition: selection_tool and selection_pipe

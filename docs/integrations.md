@@ -1,0 +1,159 @@
+# 외부 시스템 연동 가이드
+
+현재 대시보드에는 다음 시스템의 빈 패널이 준비되어 있습니다.  
+아래 가이드에 따라 실제 데이터를 연결할 수 있습니다.
+
+---
+
+## 방화벽 연동
+
+### 지원 예정 시스템
+- Palo Alto Networks (PAN-OS)
+- Fortinet FortiGate
+- Cisco ASA / Firepower
+- pfSense / OPNsense
+
+### 연동 방법 (Syslog)
+
+```python
+# modules/firewall_parser.py 생성 예시
+import socket
+
+class FirewallParser:
+    def start_syslog_listener(self, port=514):
+        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        sock.bind(('0.0.0.0', port))
+        # UDP Syslog 수신 루프
+        while self.running:
+            data, addr = sock.recvfrom(65535)
+            self._parse_syslog(data.decode('utf-8', errors='ignore'))
+```
+
+### API 엔드포인트
+
+```
+POST /api/integrations/firewall
+Content-Type: application/json
+
+{
+  "src_ip": "203.0.113.1",
+  "dst_ip": "192.168.1.10",
+  "dst_port": 443,
+  "action": "DENY",
+  "rule": "block-external-ssh",
+  "timestamp": "2024-01-15T14:30:25Z"
+}
+```
+
+---
+
+## IPS/IDS 연동
+
+### 지원 예정 시스템
+- Snort 3
+- Suricata
+- Zeek (Bro)
+
+### Suricata EVE JSON 파싱
+
+```python
+# Suricata의 eve.json 파일 tail
+import json, time
+
+def tail_eve_json(path="/var/log/suricata/eve.json"):
+    with open(path, 'r') as f:
+        f.seek(0, 2)  # 파일 끝으로
+        while True:
+            line = f.readline()
+            if not line:
+                time.sleep(0.1)
+                continue
+            event = json.loads(line)
+            if event.get('event_type') == 'alert':
+                yield event
+```
+
+---
+
+## 백신 서버 연동
+
+### AhnLab V3 (API 예시)
+
+```python
+import requests
+
+class AntivirusConnector:
+    def __init__(self, server_url, api_key):
+        self.base = server_url
+        self.headers = {"X-API-Key": api_key}
+
+    def get_detections(self, since=None):
+        r = requests.get(
+            f"{self.base}/api/v1/detections",
+            headers=self.headers,
+            params={"since": since}
+        )
+        return r.json()
+```
+
+---
+
+## EDR 연동
+
+### CrowdStrike Falcon API
+
+```python
+from falconpy import EventStreams
+
+class EDRConnector:
+    def stream_events(self, api_key, api_secret):
+        falcon = EventStreams(
+            client_id=api_key,
+            client_secret=api_secret
+        )
+        # 실시간 탐지 이벤트 스트리밍
+```
+
+---
+
+## SIEM 연동
+
+### Elastic SIEM
+
+```python
+from elasticsearch import Elasticsearch
+
+class SIEMConnector:
+    def __init__(self, hosts):
+        self.es = Elasticsearch(hosts)
+
+    def query_alerts(self, index="siem-signals-*"):
+        return self.es.search(
+            index=index,
+            body={"query": {"match_all": {}}, "size": 100}
+        )
+```
+
+### Splunk REST API
+
+```bash
+curl -k -u admin:password \
+  https://splunk-server:8089/services/search/jobs \
+  -d "search=search index=security earliest=-1h"
+```
+
+---
+
+## 연동 패널 활성화 방법
+
+1. `modules/` 에 파서 모듈 생성 (`start()`, `stop()`, `get_events()` 구현)
+2. `app.py` 에 서비스 등록:
+   ```python
+   from modules.firewall_parser import FirewallParser
+   app.firewall = FirewallParser(socketio)
+   app.firewall.start()
+   ```
+3. `api/routes.py` 에 엔드포인트 추가
+4. `templates/dashboard.html` 의 빈 패널 교체:
+   - `panel-firewall` 안의 `.empty-panel` 을 실제 테이블로 교체
+5. `static/js/dashboard.js` 에 SocketIO 이벤트 핸들러 추가

@@ -1,0 +1,2265 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>SOC 보안관제 대시보드</title>
+
+  <!-- Bootstrap 5 -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet"/>
+  <!-- Font Awesome -->
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
+  <!-- Leaflet 지도 -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  <!-- DataTables -->
+  <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css"/>
+
+  <link rel="stylesheet" href="/static/css/style.css"/>
+</head>
+<body>
+
+<!-- ══════════════ NAVBAR ══════════════ -->
+<nav class="navbar navbar-dark navbar-soc px-3 py-2">
+  <div class="d-flex align-items-center gap-2">
+    <button class="nav-toggle" id="nav-toggle" aria-label="메뉴" onclick="toggleSidebar()">
+      <i class="fa fa-bars"></i>
+    </button>
+    <i class="fa-solid fa-shield-halved fa-lg text-cyan"></i>
+    <span class="fw-bold fs-5 text-white brand-full">SOC 보안관제 대시보드</span>
+    <span class="fw-bold fs-6 text-white brand-short">SOC</span>
+    <span class="badge bg-success ms-2 live-badge" id="badge-status">LIVE</span>
+  </div>
+  <div class="d-flex align-items-center gap-3 ms-auto text-muted small">
+    <span id="current-time" class="nav-hide-mobile"></span>
+    <span class="text-success nav-hide-mobile"><i class="fa fa-circle fa-xs"></i> 시스템 정상</span>
+    <span id="ai-status-badge" class="badge bg-secondary">AI 대기중</span>
+    <a href="/logout" class="logout-btn" title="로그아웃" aria-label="로그아웃">
+      <i class="fa fa-right-from-bracket"></i>
+    </a>
+  </div>
+</nav>
+<div class="sidebar-backdrop" id="sidebar-backdrop" onclick="closeSidebar()"></div>
+
+<!-- ══════════════ LAYOUT ══════════════ -->
+<div class="d-flex" style="height: calc(100vh - 56px);">
+
+  <!-- ── SIDEBAR ── -->
+  <nav class="sidebar d-flex flex-column" id="sidebar">
+    <a href="#overview" class="sidebar-link active" data-panel="overview">
+      <i class="fa fa-satellite-dish"></i><span>AI 관제 센터</span>
+    </a>
+
+    <div class="sidebar-section-label">① 실시간 관제 (SIEM)</div>
+    <a href="#siem" class="sidebar-link" data-panel="siem">
+      <i class="fa fa-server"></i><span>SIEM 이벤트</span>
+      <span class="badge bg-danger ms-auto" id="sidebar-siem-count">0</span>
+    </a>
+    <a href="#authlog" class="sidebar-link" data-panel="authlog">
+      <i class="fa fa-key"></i><span>SSH 인증</span>
+      <span class="badge bg-danger ms-auto" id="sidebar-auth-count">0</span>
+    </a>
+    <a href="#traffic" class="sidebar-link" data-panel="traffic">
+      <i class="fa fa-chart-line"></i><span>네트워크 트래픽</span>
+    </a>
+    <a href="#packets" class="sidebar-link" data-panel="packets">
+      <i class="fa fa-network-wired"></i><span>패킷 분석</span>
+    </a>
+    <a href="#sysmon" class="sidebar-link" data-panel="sysmon">
+      <i class="fa-brands fa-windows"></i><span>Sysmon 로그</span>
+    </a>
+    <a href="#edr" class="sidebar-link" data-panel="edr">
+      <i class="fa fa-laptop-code"></i><span>EDR (AI 엔드포인트)</span>
+      <span class="badge bg-danger ms-auto" id="sidebar-edr-count">0</span>
+    </a>
+    <a href="#network" class="sidebar-link" data-panel="network">
+      <i class="fa fa-diagram-project"></i><span>네트워크 관제</span>
+      <span class="badge bg-danger ms-auto" id="sidebar-net-count">0</span>
+    </a>
+
+    <div class="sidebar-section-label">② AI 분석</div>
+    <a href="#ml" class="sidebar-link" data-panel="ml">
+      <i class="fa fa-brain"></i><span>ML 분석·의사결정</span>
+    </a>
+    <a href="#threat-intel" class="sidebar-link" data-panel="threat-intel">
+      <i class="fa fa-virus"></i><span>위협 인텔리전스</span>
+      <span class="badge bg-danger ms-auto" id="sidebar-ti-count">0</span>
+    </a>
+    <a href="#reputation" class="sidebar-link" data-panel="reputation">
+      <i class="fa fa-user-shield"></i><span>IP 평판 (AbuseIPDB)</span>
+      <span class="badge bg-danger ms-auto" id="sidebar-rep-count">0</span>
+    </a>
+    <a href="#mitre" class="sidebar-link" data-panel="mitre">
+      <i class="fa fa-crosshairs"></i><span>MITRE ATT&amp;CK</span>
+    </a>
+    <a href="#sigma" class="sidebar-link" data-panel="sigma">
+      <i class="fa fa-file-shield"></i><span>Sigma 룰 엔진</span>
+      <span class="badge bg-danger ms-auto" id="sidebar-sigma-count">0</span>
+    </a>
+
+    <div class="sidebar-section-label">③ 자동 대응 (SOAR)</div>
+    <a href="#alerts" class="sidebar-link" data-panel="alerts">
+      <i class="fa fa-triangle-exclamation"></i><span>위협 알림</span>
+      <span class="badge bg-danger ms-auto" id="sidebar-alert-count">0</span>
+    </a>
+    <a href="#soar" class="sidebar-link" data-panel="soar">
+      <i class="fa fa-robot"></i><span>SOAR 자동대응</span>
+      <span class="badge bg-info text-dark ms-auto" id="sidebar-soar-count">0</span>
+    </a>
+    <a href="#incidents" class="sidebar-link" data-panel="incidents">
+      <i class="fa fa-folder-open"></i><span>인시던트</span>
+      <span class="badge bg-danger ms-auto" id="sidebar-inc-count">0</span>
+    </a>
+    <a href="#vulnscan" class="sidebar-link" data-panel="vulnscan">
+      <i class="fa fa-magnifying-glass-chart"></i><span>취약점 스캔 (포트/CVE)</span>
+      <span class="badge bg-danger ms-auto" id="sidebar-vuln-count">0</span>
+    </a>
+    <a href="#fuzz" class="sidebar-link" data-panel="fuzz">
+      <i class="fa fa-bug"></i><span>웹 퍼징 (견고성)</span>
+      <span class="badge bg-danger ms-auto" id="sidebar-fuzz-count">0</span>
+    </a>
+    <a href="#patch" class="sidebar-link" data-panel="patch">
+      <i class="fa fa-shield-halved"></i><span>취약점 패치 (Ansible)</span>
+      <span class="badge bg-warning text-dark ms-auto" id="sidebar-patch-count">0</span>
+    </a>
+    <a href="#purple" class="sidebar-link" data-panel="purple">
+      <i class="fa fa-flask-vial"></i><span>퍼플팀 검증</span>
+      <span class="badge bg-info text-dark ms-auto" id="sidebar-purple-cov">-</span>
+    </a>
+
+    <div class="sidebar-section-label">시스템</div>
+    <a href="#report" class="sidebar-link" data-panel="report">
+      <i class="fa fa-file-lines"></i><span>일일 AI 리포트</span>
+    </a>
+    <a href="#myinfo" class="sidebar-link" data-panel="myinfo">
+      <i class="fa fa-id-card"></i><span>내 정보</span>
+    </a>
+    <a href="#notify" class="sidebar-link" data-panel="notify">
+      <i class="fa fa-bell"></i><span>푸시 알림 (ntfy)</span>
+    </a>
+
+    <hr class="border-secondary mx-2"/>
+    <div class="sidebar-section-label">외부 시스템 연동 (대기)</div>
+    <a href="#firewall" class="sidebar-link disabled-link" data-panel="firewall">
+      <i class="fa fa-fire"></i><span>방화벽</span>
+      <span class="badge bg-secondary ms-auto">대기</span>
+    </a>
+    <a href="#ips" class="sidebar-link disabled-link" data-panel="ips">
+      <i class="fa fa-shield-virus"></i><span>IPS/IDS</span>
+      <span class="badge bg-secondary ms-auto">대기</span>
+    </a>
+  </nav>
+
+  <!-- ── MAIN CONTENT ── -->
+  <main class="main-content flex-fill overflow-auto p-3">
+
+    <!-- ════ 개요 패널 (AI 관제 센터) ════ -->
+    <div id="panel-overview" class="panel-section">
+      <div class="panel-title d-flex align-items-center">
+        <i class="fa fa-satellite-dish me-2 text-cyan"></i>AI 관제 센터
+        <span id="threat-level-badge" class="ms-3 badge bg-success">위협 수준: LOW</span>
+        <span class="ms-auto small text-muted"><span class="live-badge">LIVE</span> <span id="overview-last-update">최종 갱신 —</span></span>
+      </div>
+
+      <!-- SOC 파이프라인 상태: 탐지 → AI 판정 → 자동 대응 → 케이스 -->
+      <div class="soc-pipeline mb-3">
+        <div class="pipe-stage clickable" onclick="showPanel('siem')">
+          <div class="pipe-icon text-cyan"><i class="fa fa-server"></i></div>
+          <div class="pipe-body">
+            <div class="pipe-label">① 수집·탐지 (SIEM)</div>
+            <div class="pipe-value"><span id="pipe-siem-total">0</span><span class="pipe-sub"> 이벤트 · 의심 <span id="pipe-siem-susp" class="text-danger">0</span></span></div>
+          </div>
+        </div>
+        <div class="pipe-arrow"><i class="fa fa-angle-right"></i></div>
+        <div class="pipe-stage clickable" onclick="showPanel('ml')">
+          <div class="pipe-icon text-purple"><i class="fa fa-brain"></i></div>
+          <div class="pipe-body">
+            <div class="pipe-label">② AI 트리아지</div>
+            <div class="pipe-value"><span id="pipe-ai-triage">0</span><span class="pipe-sub"> 판정 · 정탐 <span id="pipe-ai-tp" class="text-warning verdict-link" onclick="event.stopPropagation(); showVerdictDetail('tp')" title="정탐 상세 내역">0</span> · 오탐 <span id="pipe-ai-fp" class="text-success verdict-link" onclick="event.stopPropagation(); showVerdictDetail('fp')" title="오탐 상세 내역">0</span></span></div>
+          </div>
+        </div>
+        <div class="pipe-arrow"><i class="fa fa-angle-right"></i></div>
+        <div class="pipe-stage clickable" onclick="showPanel('soar')">
+          <div class="pipe-icon text-info"><i class="fa fa-robot"></i></div>
+          <div class="pipe-body">
+            <div class="pipe-label">③ 자동 대응 (SOAR)</div>
+            <div class="pipe-value"><span id="pipe-soar-actions">0</span><span class="pipe-sub"> 조치 · 차단 <span id="pipe-soar-blocked" class="text-danger">0</span></span></div>
+          </div>
+        </div>
+        <div class="pipe-arrow"><i class="fa fa-angle-right"></i></div>
+        <div class="pipe-stage clickable" onclick="showPanel('incidents')">
+          <div class="pipe-icon text-danger"><i class="fa fa-folder-open"></i></div>
+          <div class="pipe-body">
+            <div class="pipe-label">④ 인시던트</div>
+            <div class="pipe-value"><span id="pipe-inc-active">0</span><span class="pipe-sub"> 활성 케이스</span></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 메인 관제 커맨드월: 라이브 스트림 | 3D 지도 | KPI 레일 (울트라와이드 3열) -->
+      <div class="row g-3 mb-3 command-wall">
+        <div class="col-lg-5 col-xxl-4">
+          <div class="card-panel h-100 d-flex flex-column" style="min-height:490px">
+            <div class="card-panel-header">
+              <i class="fa fa-wave-square text-cyan me-2"></i>통합 라이브 이벤트 스트림
+              <span class="ms-auto d-flex gap-1">
+                <button class="btn btn-xs tp-toggle" onclick="toggleTpOnly(this)"
+                        title="오탐 의심(저신뢰) 알림 숨기기 — 정탐만 표시">
+                  <i class="fa fa-filter me-1"></i>정탐만
+                </button>
+                <span class="mx-1" style="border-left:1px solid var(--border)"></span>
+                <button class="btn btn-xs live-filter active" data-lf="all" onclick="setLiveFilter('all',this)">전체</button>
+                <button class="btn btn-xs live-filter" data-lf="alert" onclick="setLiveFilter('alert',this)">알림</button>
+                <button class="btn btn-xs live-filter" data-lf="siem" onclick="setLiveFilter('siem',this)">SIEM</button>
+                <button class="btn btn-xs live-filter" data-lf="soar" onclick="setLiveFilter('soar',this)">대응</button>
+              </span>
+            </div>
+            <div id="live-stream" class="live-stream flex-fill">
+              <div class="text-muted p-3 small text-center">이벤트 수신 대기 중…</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-7 col-xxl-5">
+          <div class="card-panel p-0 overflow-hidden h-100">
+            <div class="card-panel-header px-3 py-2">
+              <i class="fa fa-earth-asia text-cyan me-2"></i>실시간 글로벌 공격 지도 (3D)
+              <span class="ms-auto small text-muted">드래그 회전 · 휠 확대</span>
+            </div>
+            <div id="attack-globe" style="height:452px; background:radial-gradient(ellipse at center, #0b1e3a 0%, #020615 70%, #000 100%); position:relative;"></div>
+          </div>
+        </div>
+        <!-- KPI 레일: 울트라와이드에선 우측 세로, 좁은 화면에선 하단 가로 -->
+        <div class="col-12 col-xxl-3">
+          <div class="row g-2 h-100 kpi-rail">
+            <div class="col-6 col-md-2 col-xxl-6">
+              <div class="stat-card stat-sm border-danger clickable h-100" onclick="showPanel('alerts')" title="전체 알림">
+                <div class="stat-value" id="stat-total-alerts">0</div>
+                <div class="stat-label">전체 알림</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-2 col-xxl-6">
+              <div class="stat-card stat-sm border-warning clickable h-100" onclick="showPanel('alerts')" title="미처리 알림">
+                <div class="stat-value" id="stat-open-alerts">0</div>
+                <div class="stat-label">미처리</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-2 col-xxl-6">
+              <div class="stat-card stat-sm border-danger clickable h-100" onclick="filterAlerts('CRITICAL')" title="CRITICAL 알림만 보기">
+                <div class="stat-value text-danger" id="kpi-critical">0</div>
+                <div class="stat-label">CRITICAL</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-2 col-xxl-6">
+              <div class="stat-card stat-sm border-orange clickable h-100" onclick="filterAlerts('HIGH')" title="HIGH 알림만 보기">
+                <div class="stat-value text-orange" id="kpi-high">0</div>
+                <div class="stat-label">HIGH</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-2 col-xxl-6">
+              <div class="stat-card stat-sm border-cyan h-100" title="고유 공격자 IP 수">
+                <div class="stat-value text-cyan" id="kpi-unique-attackers">0</div>
+                <div class="stat-label">공격자 IP</div>
+              </div>
+            </div>
+            <div class="col-6 col-md-2 col-xxl-6">
+              <div class="stat-card stat-sm border-purple clickable h-100" onclick="showPanel('mitre')" title="MITRE ATT&CK">
+                <div class="stat-value text-purple" id="kpi-mitre">0</div>
+                <div class="stat-label">MITRE 매핑</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 공격 로그 (지도 보조) -->
+      <div class="row g-3 mb-3">
+        <div class="col-12">
+          <div class="card-panel">
+            <div class="card-panel-header">
+              <i class="fa fa-list text-danger me-2"></i>공격 로그 (지도 궤적)
+              <span class="ms-auto small text-muted">실시간</span>
+            </div>
+            <div id="attack-log" class="attack-log-list" style="max-height:150px; overflow-y:auto"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 국가 TOP 10 + 실시간 트래픽 -->
+      <div class="row g-3 mb-3">
+        <div class="col-lg-6">
+          <div class="card-panel">
+            <div class="card-panel-header">
+              <i class="fa fa-flag text-warning me-2"></i>공격 출발국 TOP 10
+            </div>
+            <div class="chart-wrap" style="height:170px">
+              <canvas id="country-chart"></canvas>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="card-panel">
+            <div class="card-panel-header">
+              <i class="fa fa-chart-line text-cyan me-2"></i>실시간 트래픽 (pps)
+              <span class="ms-auto small text-muted">최근 60초</span>
+            </div>
+            <div class="chart-wrap" style="height:170px">
+              <canvas id="mini-traffic-chart"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 분포: 프로토콜 / 심각도 / 위협유형 -->
+      <div class="row g-3 mb-3">
+        <div class="col-lg-4">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-chart-pie text-info me-2"></i>프로토콜 분포</div>
+            <div class="chart-wrap" style="height:180px"><canvas id="proto-chart"></canvas></div>
+          </div>
+        </div>
+        <div class="col-lg-4">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-chart-pie text-warning me-2"></i>알림 심각도</div>
+            <div class="chart-wrap" style="height:180px"><canvas id="severity-chart"></canvas></div>
+          </div>
+        </div>
+        <div class="col-lg-4">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-bug text-orange me-2"></i>위협 유형 분포</div>
+            <div class="chart-wrap" style="height:180px"><canvas id="threat-type-chart"></canvas></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TOP 공격자 / ML 상태 / Sysmon 미니 -->
+      <div class="row g-3 mb-3">
+        <div class="col-lg-4">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-user-ninja text-danger me-2"></i>TOP 공격자 IP</div>
+            <div id="top-attackers-list" class="small" style="color:#e6edf3;"><div class="text-muted p-2">데이터 없음</div></div>
+          </div>
+        </div>
+        <div class="col-lg-4">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-brain text-cyan me-2"></i>ML 모델 상태</div>
+            <div class="ml-status-overview small p-2" style="color:#e6edf3;">
+              <div class="d-flex justify-content-between py-1">
+                <span>Isolation Forest</span>
+                <span><span class="badge bg-success me-1" id="ov-if-badge">●</span><span id="ov-if-anom">0</span>건 이상</span>
+              </div>
+              <div class="d-flex justify-content-between py-1 border-top border-secondary">
+                <span>Random Forest</span>
+                <span id="ov-rf-last" class="text-info">-</span>
+              </div>
+              <div class="d-flex justify-content-between py-1 border-top border-secondary">
+                <span>LSTM Autoencoder</span>
+                <span><span class="badge bg-success me-1" id="ov-lstm-badge">●</span><span id="ov-lstm-anom">0</span>건 이상</span>
+              </div>
+              <div class="d-flex justify-content-between py-1 border-top border-secondary">
+                <span>Q-Learning 임계값</span>
+                <span class="text-warning"><span id="ov-rl-mult">1.0</span>x</span>
+              </div>
+              <div class="mt-2">
+                <button class="btn btn-xs btn-outline-cyan w-100" onclick="showPanel('ml')">
+                  <i class="fa fa-arrow-right-long me-1"></i>ML 패널로 이동
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-4">
+          <div class="card-panel">
+            <div class="card-panel-header">
+              <i class="fa-brands fa-windows text-info me-2"></i>최근 Sysmon 이벤트
+              <button class="btn btn-xs btn-outline-secondary ms-auto" onclick="showPanel('sysmon')">전체 보기</button>
+            </div>
+            <div id="overview-sysmon-list" class="sysmon-mini-list"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 위협 인텔 + 최근 알림 -->
+      <div class="row g-3">
+        <div class="col-lg-5">
+          <div class="card-panel h-100">
+            <div class="card-panel-header">
+              <i class="fa fa-virus text-danger me-2"></i>위협 인텔리전스 (IoC 매칭)
+              <button class="btn btn-xs btn-outline-secondary ms-auto" onclick="showPanel('threat-intel')">전체 보기</button>
+            </div>
+            <div class="row g-2 small mb-2" style="color:#e6edf3">
+              <div class="col-4 text-center">
+                <div class="text-danger fw-bold" style="font-size:1.2rem" id="ov-ti-bad-ip">0</div>
+                <div class="text-muted">악성 IP</div>
+              </div>
+              <div class="col-4 text-center">
+                <div class="text-orange fw-bold" style="font-size:1.2rem" id="ov-ti-bad-url">0</div>
+                <div class="text-muted">악성 URL</div>
+              </div>
+              <div class="col-4 text-center">
+                <div class="text-warning fw-bold" style="font-size:1.2rem" id="ov-ti-match">0</div>
+                <div class="text-muted">매칭</div>
+              </div>
+            </div>
+            <div id="ov-ti-recent" class="small" style="max-height:180px;overflow-y:auto">
+              <div class="text-muted p-2">매칭 대기 중...</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-7">
+          <div class="card-panel h-100">
+            <div class="card-panel-header">
+              <i class="fa fa-bell text-danger me-2"></i>최근 위협 알림
+              <button class="btn btn-xs btn-outline-secondary ms-auto" onclick="showPanel('alerts')">전체 보기</button>
+            </div>
+            <div id="recent-alerts-list" class="alert-list recent-alerts-white"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 숨김: 통계만 받아오는 용도 -->
+      <span id="stat-pps" class="d-none">0</span>
+      <span id="stat-total-packets" class="d-none">0</span>
+      <span id="stat-sysmon-events" class="d-none">0</span>
+      <span id="stat-ai-analyses" class="d-none">0</span>
+      <span id="kpi-ml-anomaly" class="d-none">0</span>
+      <span id="kpi-blocked" class="d-none">0</span>
+    </div><!-- /panel-overview -->
+
+    <!-- ════ 트래픽 패널 ════ -->
+    <div id="panel-traffic" class="panel-section d-none">
+      <div class="panel-title"><i class="fa fa-chart-line me-2 text-cyan"></i>네트워크 트래픽 분석</div>
+
+      <!-- 가이드 -->
+      <div class="card-panel mb-3" style="border-left:3px solid var(--cyan); background:rgba(57,208,216,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-cyan me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          실시간 네트워크 트래픽을 4가지 관점으로 봅니다. <strong class="text-cyan">pps/bps 추이</strong>에서 갑자기 수직 상승(스파이크)이면 <span class="text-danger">DDoS·대량 스캔 의심</span>. <strong class="text-cyan">Top Talkers</strong>에 낯선 내부 IP가 상위에 오르면 내부 확산 가능성. <strong class="text-cyan">프로토콜 분포</strong>가 평소와 다르게 ICMP·UDP 비중이 급증하면 터널링/flood 가능성을 의심하세요.
+        </div>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-lg-6">
+          <div class="card-panel">
+            <div class="card-panel-header">패킷/초 (pps) 추이</div>
+            <div class="chart-wrap" style="height:180px"><canvas id="traffic-pps-chart"></canvas></div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="card-panel">
+            <div class="card-panel-header">바이트/초 (bps) 추이</div>
+            <div class="chart-wrap" style="height:180px"><canvas id="traffic-bps-chart"></canvas></div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="card-panel">
+            <div class="card-panel-header">상위 송신 IP (Top Talkers)</div>
+            <div class="chart-wrap" style="height:200px"><canvas id="top-talkers-chart"></canvas></div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="card-panel">
+            <div class="card-panel-header">프로토콜 분포</div>
+            <div class="chart-wrap" style="height:200px"><canvas id="proto-dist-chart"></canvas></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ 알림 패널 ════ -->
+    <div id="panel-alerts" class="panel-section d-none">
+      <div class="panel-title"><i class="fa fa-triangle-exclamation me-2 text-danger"></i>위협 알림 관리</div>
+
+      <!-- 가이드 -->
+      <div class="card-panel mb-3" style="border-left:3px solid var(--red); background:rgba(248,81,73,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-red me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          탐지 엔진이 생성한 모든 알림을 관리합니다. <strong class="text-danger">CRITICAL → HIGH → MEDIUM</strong> 순으로 우선 처리하세요. 각 행의 <strong>AI 분석</strong> 버튼은 Claude에게 대응 권고를 받고, <strong>확인(ACK)</strong>은 조사 중, <strong>종료(CLOSED)</strong>는 처리 완료 의미입니다. 상단 필터로 심각도·상태별로 좁혀 볼 수 있고, 우측 상단 <strong>AI 트래픽 분석</strong>은 최근 전체 트래픽을 Claude에 요약 질의합니다.
+        </div>
+      </div>
+
+      <div class="row g-2 mb-3">
+        <div class="col-auto">
+          <select class="form-select form-select-sm bg-dark text-white border-secondary" id="alert-severity-filter">
+            <option value="">전체 심각도</option>
+            <option value="CRITICAL">CRITICAL</option>
+            <option value="HIGH">HIGH</option>
+            <option value="MEDIUM">MEDIUM</option>
+            <option value="LOW">LOW</option>
+          </select>
+        </div>
+        <div class="col-auto">
+          <select class="form-select form-select-sm bg-dark text-white border-secondary" id="alert-status-filter">
+            <option value="">전체 상태</option>
+            <option value="OPEN">OPEN</option>
+            <option value="ACK">확인됨</option>
+            <option value="CLOSED">종료</option>
+          </select>
+        </div>
+        <div class="col-auto d-flex align-items-center">
+          <div class="form-check form-switch mb-0">
+            <input class="form-check-input" type="checkbox" id="alert-tp-only" onchange="toggleTpOnly(this)">
+            <label class="form-check-label small" for="alert-tp-only"
+                   title="오탐 의심(저신뢰) 알림 숨기기">정탐만 보기</label>
+          </div>
+        </div>
+        <div class="col-auto ms-auto">
+          <button class="btn btn-sm btn-outline-info" onclick="analyzeTrafficAI()">
+            <i class="fa fa-robot me-1"></i>AI 트래픽 분석
+          </button>
+        </div>
+      </div>
+      <div class="card-panel p-0">
+        <table id="alerts-table" class="table table-dark table-hover table-sm mb-0">
+          <thead>
+            <tr>
+              <th>시각</th><th>심각도</th><th>유형</th><th>출발지</th><th>목적지</th><th>설명</th><th>상태</th><th>조치</th>
+            </tr>
+          </thead>
+          <tbody id="alerts-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ════ 패킷 분석 패널 ════ -->
+    <div id="panel-packets" class="panel-section d-none">
+      <div class="panel-title"><i class="fa fa-network-wired me-2 text-cyan"></i>패킷 분석 (PyShark / Scapy)</div>
+
+      <!-- 가이드 -->
+      <div class="card-panel mb-3" style="border-left:3px solid var(--cyan); background:rgba(57,208,216,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-cyan me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          캡처된 개별 패킷을 원시(raw) 형태로 확인합니다. <strong class="text-cyan">출발/목적 IP</strong>로 대화 상대를 확인하고, <strong>목적 포트</strong>가 <code>4444 · 5555 · 1337 · 8443</code> 같은 비표준 포트면 <span class="text-danger">Metasploit C2 의심</span>. ICMP/ARP가 짧은 시간 반복되면 스캔/스푸핑 가능성. DataTables의 검색 박스로 특정 IP·포트를 빠르게 필터링하세요.
+        </div>
+      </div>
+
+      <div class="card-panel p-0">
+        <table id="packets-table" class="table table-dark table-hover table-sm table-monospace mb-0">
+          <thead>
+            <tr>
+              <th>시각</th><th>출발지 IP</th><th>목적지 IP</th><th>출발 포트</th><th>목적 포트</th><th>프로토콜</th><th>길이</th><th>정보</th>
+            </tr>
+          </thead>
+          <tbody id="packets-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ════ Sysmon 패널 ════ -->
+    <div id="panel-sysmon" class="panel-section d-none">
+      <div class="panel-title"><i class="fa-brands fa-windows me-2"></i>Sysmon 이벤트 로그</div>
+
+      <!-- 가이드 -->
+      <div class="card-panel mb-3" style="border-left:3px solid var(--blue); background:rgba(88,166,255,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-info me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          엔드포인트 단위의 상세 행위 로그입니다. 주목할 Event ID: <strong>ID 1</strong> 프로세스 생성(비정상 경로·PowerShell 인코딩 주의), <strong>ID 3</strong> 네트워크 연결(비표준 포트·외부 C2), <strong>ID 8</strong> 원격 스레드(Meterpreter migrate), <strong>ID 10</strong> LSASS 접근(자격증명 덤프), <strong>ID 12/13</strong> Run 키 지속성. <span class="badge bg-danger">의심</span> 배지가 붙은 행은 Metasploit/악성 도구 시그니처 일치 — 즉시 해당 단말 격리를 검토하세요.
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-sm-4"><div class="stat-card border-info"><div class="stat-value" id="sys-total">0</div><div class="stat-label">전체 이벤트</div></div></div>
+        <div class="col-sm-4"><div class="stat-card border-warning"><div class="stat-value" id="sys-suspicious">0</div><div class="stat-label">의심 이벤트</div></div></div>
+        <div class="col-sm-4"><div class="stat-card border-danger"><div class="stat-value" id="sys-critical">0</div><div class="stat-label">CRITICAL</div></div></div>
+      </div>
+      <div class="card-panel p-0">
+        <table id="sysmon-table" class="table table-dark table-hover table-sm mb-0">
+          <thead>
+            <tr><th>시각</th><th>이벤트 ID</th><th>이벤트명</th><th>심각도</th><th>프로세스</th><th>메시지</th><th>의심</th></tr>
+          </thead>
+          <tbody id="sysmon-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ════ ML 자체 모델 패널 ════ -->
+    <div id="panel-ml" class="panel-section d-none">
+      <div class="panel-title"><i class="fa fa-brain me-2 text-purple"></i>ML 자체 보안 AI 모델</div>
+
+      <!-- 이 패널은 어떻게 보나요? (가이드) -->
+      <div class="card-panel mb-3" style="border-left:3px solid var(--cyan); background:rgba(57,208,216,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-cyan me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          4개의 AI 모델이 <strong class="text-cyan">실시간 트래픽</strong>을 동시에 분석합니다. 아래 순서로 읽으면 됩니다.
+          <ol class="mb-0 mt-1 ps-3">
+            <li><strong class="text-purple">Random Forest (예측)</strong> — 현재 트래픽이 어떤 공격 유형일 확률이 가장 높은지. 막대가 길수록 그 공격 가능성이 큽니다. <span style="color:#e6edf3">NORMAL이 녹색이면 정상.</span></li>
+            <li><strong class="text-danger">LSTM 재구성 오차</strong> — 빨간 선(오차)이 노란 점선(임계값)을 <u>넘으면 이상</u>. 평소는 임계값 아래에서 잔잔해야 정상.</li>
+            <li><strong class="text-cyan">Isolation Forest 점수</strong> — 값이 <u>0보다 크면 정상, 0보다 작을수록 이상</u>. 급격히 떨어지면 비정상 트래픽.</li>
+            <li><strong class="text-warning">Q-Learning 임계값 배율</strong> — 오탐이 많으면 배율을 올려(둔감) / 놓치면 내려(민감) 자동 조정. <span style="color:#e6edf3">1.0x가 기본.</span></li>
+          </ol>
+          <div class="mt-2" style="font-size:11px;color:#e6edf3">
+            ⓘ 상단 <strong>IF 이상 / LSTM 이상</strong> 카운터가 갑자기 오르면 주의, 하단 <strong>ML 분석 로그</strong>에서 정/오탐 피드백을 주면 Q-Learning이 학습합니다.
+          </div>
+        </div>
+      </div>
+
+      <!-- 모델 상태 카드 -->
+      <div class="row g-3 mb-3">
+        <div class="col-sm-3">
+          <div class="stat-card border-purple">
+            <div class="stat-value text-purple" id="ml-if-anomalies">0</div>
+            <div class="stat-label">IF 이상 탐지</div>
+          </div>
+        </div>
+        <div class="col-sm-3">
+          <div class="stat-card border-cyan">
+            <div class="stat-value text-cyan" id="ml-lstm-anomalies">0</div>
+            <div class="stat-label">LSTM 이상 탐지</div>
+          </div>
+        </div>
+        <div class="col-sm-3">
+          <div class="stat-card border-warning">
+            <div class="stat-value text-warning" id="ml-rl-threshold">1.0x</div>
+            <div class="stat-label">RL 임계값 배율</div>
+          </div>
+        </div>
+        <div class="col-sm-3">
+          <div class="stat-card border-success">
+            <div class="stat-value text-success" id="ml-status-badge">초기화 중...</div>
+            <div class="stat-label">모델 상태</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-3">
+        <!-- 모델 설명 -->
+        <div class="col-lg-4">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-circle-info text-cyan me-2"></i>탑재 AI 모델</div>
+            <div class="small">
+              <div class="mb-2 p-2 rounded" style="background:rgba(57,208,216,.07);border-left:3px solid var(--cyan)">
+                <strong class="text-cyan">Isolation Forest</strong><br/>
+                <span style="color:#fff">비지도 학습 — 정상 트래픽 패턴에서 벗어난 이상 트래픽 탐지<br/>
+                오염률(contamination): 8% | 트리: 200개</span>
+              </div>
+              <div class="mb-2 p-2 rounded" style="background:rgba(157,121,242,.07);border-left:3px solid var(--purple)">
+                <strong class="text-purple">Random Forest</strong><br/>
+                <span style="color:#fff">지도 학습 — 6가지 공격 유형 분류<br/>
+                (정상, DDoS, 포트스캔, 브루트포스, 데이터유출, C2)<br/>
+                트리: 300개 | 최대깊이: 12</span>
+              </div>
+              <div class="mb-2 p-2 rounded" style="background:rgba(248,81,73,.07);border-left:3px solid var(--red)">
+                <strong class="text-danger">LSTM Autoencoder</strong><br/>
+                <span style="color:#fff">딥러닝 — 30초 시계열 트래픽 패턴 학습<br/>
+                재구성 오차로 이상 탐지<br/>
+                Encoder: LSTM(64→32) | Decoder: LSTM(32→64)</span>
+              </div>
+              <div class="p-2 rounded" style="background:rgba(227,179,65,.07);border-left:3px solid var(--yellow)">
+                <strong class="text-warning">Q-Learning Agent</strong><br/>
+                <span style="color:#fff">강화학습 — 탐지 임계값 자동 최적화<br/>
+                상태: 27가지 (트래픽·알림빈도·오탐율)<br/>
+                보상: 탐지성공 +5, 오탐 -3, 미탐지 -10</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RF 분류 확률 -->
+        <div class="col-lg-4">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-chart-bar text-purple me-2"></i>Random Forest 분류 결과</div>
+            <canvas id="rf-proba-chart" height="200"></canvas>
+            <div class="mt-2 text-center small" id="rf-verdict">-</div>
+          </div>
+        </div>
+
+        <!-- LSTM 재구성 오차 -->
+        <div class="col-lg-4">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-wave-square text-danger me-2"></i>LSTM 재구성 오차</div>
+            <canvas id="lstm-error-chart" height="200"></canvas>
+            <div class="mt-2 text-center small" id="lstm-verdict">-</div>
+          </div>
+        </div>
+
+        <!-- IF 이상탐지 점수 추이 -->
+        <div class="col-lg-6">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-chart-line text-cyan me-2"></i>Isolation Forest 이상 점수 추이</div>
+            <canvas id="if-score-chart" height="120"></canvas>
+          </div>
+        </div>
+
+        <!-- RL 임계값 추이 -->
+        <div class="col-lg-6">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-sliders text-warning me-2"></i>Q-Learning 임계값 변화 (ε: <span id="rl-epsilon">-</span>)</div>
+            <canvas id="rl-threshold-chart" height="120"></canvas>
+            <div class="mt-2 small text-center" id="rl-action-label">-</div>
+          </div>
+        </div>
+
+        <!-- ML 분석 로그 -->
+        <div class="col-12">
+          <div class="card-panel">
+            <div class="card-panel-header">
+              <i class="fa fa-list text-muted me-2"></i>ML 분석 로그
+              <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="triggerMLAnalysis()">
+                <i class="fa fa-play me-1"></i>지금 분석
+              </button>
+              <button class="btn btn-xs btn-outline-secondary ms-2" onclick="sendFeedback(false)">정탐</button>
+              <button class="btn btn-xs btn-outline-warning ms-1" onclick="sendFeedback(true)">오탐</button>
+            </div>
+            <div id="ml-log" style="max-height:250px;overflow-y:auto;font-size:11.5px;"></div>
+          </div>
+        </div>
+
+        <!-- 의사결정 지원: 유사 위협 그룹핑 + 정오탐 자동 분석 -->
+        <div class="col-12">
+          <div class="card-panel">
+            <div class="card-panel-header">
+              <i class="fa fa-sitemap text-cyan me-2"></i>ML 의사결정 지원 — 유사 위협 그룹핑 &amp; 정오탐 분석
+              <span class="badge bg-secondary ms-2" id="ds-cluster-count">0 그룹</span>
+              <span class="badge bg-warning text-dark ms-1" id="ds-verdict-count">판정 0건</span>
+              <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="loadDecisionSupport()">
+                <i class="fa fa-sync me-1"></i>새로고침
+              </button>
+            </div>
+            <div class="small text-muted px-2 pb-1" style="font-size:10.5px">
+              동일 (위협유형 × 출발지 /24) 그룹의 AI/규칙 판정을 학습해 정탐률을 추정하고,
+              그 결과가 신규 알림의 신뢰도에 자동 반영됩니다. 오탐이 반복되는 그룹은 자동으로 조용해집니다.
+            </div>
+            <div class="table-responsive" style="max-height:320px; overflow-y:auto">
+              <table class="table table-dark table-sm mb-0" style="font-size:12px">
+                <thead><tr>
+                  <th>위협 그룹</th><th>출발지 대역</th><th>건수</th><th>IP수</th>
+                  <th>심각도</th><th>정탐/오탐</th><th>정탐률</th><th>자동 추론 권고</th>
+                </tr></thead>
+                <tbody id="ds-clusters-tbody">
+                  <tr><td colspan="8" class="text-muted text-center p-3">아직 그룹 없음</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div><!-- /panel-ml -->
+
+    <!-- ════ MITRE ATT&CK 매트릭스 ════ -->
+    <div id="panel-mitre" class="panel-section d-none">
+      <div class="panel-title"><i class="fa fa-crosshairs me-2 text-danger"></i>MITRE ATT&amp;CK Enterprise Matrix</div>
+
+      <!-- 가이드 -->
+      <div class="card-panel mb-3" style="border-left:3px solid var(--red); background:rgba(248,81,73,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-red me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          실제 탐지된 공격을 MITRE 공격 단계(Tactic)와 세부 기법(Technique)에 매핑합니다. <strong>아래 매트릭스의 셀을 클릭</strong>하면 해당 기법의 상세, 관련 IP, 방어 권고가 표시됩니다.
+          <ul class="mb-0 mt-1 ps-3">
+            <li><span class="mitre-cell hit-low" style="display:inline-block;width:16px;height:10px;vertical-align:middle"></span> 1–2회 탐지 · <span class="mitre-cell hit-med" style="display:inline-block;width:16px;height:10px;vertical-align:middle"></span> 3–9회 · <span class="mitre-cell hit-high" style="display:inline-block;width:16px;height:10px;vertical-align:middle"></span> 10회 이상</li>
+            <li>우측 최근 로그에서 🔴 CRITICAL / 🟠 HIGH 가 지속적으로 보이면 즉시 대응 필요</li>
+          </ul>
+        </div>
+      </div>
+
+      <!-- 요약 카드 -->
+      <div class="row g-3 mb-3">
+        <div class="col-md-3">
+          <div class="stat-card border-danger">
+            <div class="stat-icon text-danger"><i class="fa fa-bullseye"></i></div>
+            <div class="stat-value" id="mitre-total">0</div>
+            <div class="stat-label">매핑된 이벤트</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="stat-card border-warning">
+            <div class="stat-icon text-warning"><i class="fa fa-gavel"></i></div>
+            <div class="stat-value" id="mitre-unique">0</div>
+            <div class="stat-label">활성 Technique</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="stat-card border-cyan">
+            <div class="stat-icon text-cyan"><i class="fa fa-layer-group"></i></div>
+            <div class="stat-value">14</div>
+            <div class="stat-label">Tactics</div>
+          </div>
+        </div>
+        <div class="col-md-3">
+          <div class="stat-card border-purple">
+            <div class="stat-icon text-purple"><i class="fa fa-shield"></i></div>
+            <div class="stat-value" id="mitre-coverage">0%</div>
+            <div class="stat-label">매트릭스 커버리지</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ATT&CK 매트릭스 테이블 -->
+      <div class="card-panel p-2 mb-3">
+        <div class="card-panel-header">
+          <i class="fa fa-table text-danger me-2"></i>ATT&amp;CK 매트릭스 (탐지된 Technique는 빨간색 강조 · 셀 클릭 시 상세)
+          <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="loadMitreMatrix()">
+            <i class="fa fa-sync me-1"></i>새로고침
+          </button>
+        </div>
+        <div class="mitre-matrix-wrapper" id="mitre-matrix-container"></div>
+      </div>
+
+      <!-- 상세 로그 (확장된 테이블) -->
+      <div class="card-panel p-0 mb-3">
+        <div class="card-panel-header">
+          <i class="fa fa-clock-rotate-left text-info me-2"></i>상세 ATT&amp;CK 매핑 로그
+          <span class="small text-muted ms-3">최근 200건 · Technique 링크 클릭 시 상세</span>
+          <div class="ms-auto d-flex gap-1">
+            <select id="mitre-log-sev-filter" class="form-select form-select-sm bg-dark text-white border-secondary" style="width:auto">
+              <option value="">전체 심각도</option>
+              <option value="CRITICAL">CRITICAL</option>
+              <option value="HIGH">HIGH</option>
+              <option value="MEDIUM">MEDIUM</option>
+            </select>
+            <input id="mitre-log-filter" type="text" class="form-control form-control-sm bg-dark text-white border-secondary" placeholder="IP/기법 검색" style="width:180px"/>
+          </div>
+        </div>
+        <div style="max-height:420px; overflow-y:auto">
+          <table class="table table-dark table-hover table-sm mb-0">
+            <thead class="table-dark" style="position:sticky;top:0;z-index:2">
+              <tr>
+                <th style="width:140px">시각</th>
+                <th style="width:80px">심각도</th>
+                <th style="width:120px">Tactic</th>
+                <th style="width:140px">Technique</th>
+                <th style="width:120px">출발 IP</th>
+                <th style="width:120px">목적 IP</th>
+                <th style="width:100px">프로세스</th>
+                <th>설명</th>
+              </tr>
+            </thead>
+            <tbody id="mitre-log-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="row g-3">
+        <!-- TOP Technique -->
+        <div class="col-lg-6">
+          <div class="card-panel">
+            <div class="card-panel-header">
+              <i class="fa fa-fire text-danger me-2"></i>가장 많이 탐지된 Technique
+            </div>
+            <div id="mitre-top-list" class="small">데이터 수집 중...</div>
+          </div>
+        </div>
+        <!-- 최근 매핑 이벤트 (요약) -->
+        <div class="col-lg-6">
+          <div class="card-panel">
+            <div class="card-panel-header">
+              <i class="fa fa-rss text-info me-2"></i>최근 이벤트 스트림
+            </div>
+            <div id="mitre-recent-list" class="small" style="max-height:300px;overflow-y:auto">데이터 수집 중...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Technique 상세 모달 -->
+    <div class="modal fade" id="mitreDetailModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content bg-dark text-white border border-secondary">
+          <div class="modal-header border-secondary">
+            <h5 class="modal-title" id="mitre-detail-title">
+              <i class="fa fa-crosshairs text-danger me-2"></i>Technique 상세
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body" id="mitre-detail-body">
+            <div class="text-center text-muted py-5">로딩 중...</div>
+          </div>
+          <div class="modal-footer border-secondary">
+            <a id="mitre-detail-ref" href="#" target="_blank" class="btn btn-sm btn-outline-info">
+              <i class="fa fa-arrow-up-right-from-square me-1"></i>MITRE 공식 문서
+            </a>
+            <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">닫기</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ 정탐/오탐 상세 내역 모달 ════ -->
+    <div class="modal fade" id="verdictDetailModal" tabindex="-1" aria-hidden="true">
+      <div class="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content bg-dark text-white border border-secondary">
+          <div class="modal-header border-secondary">
+            <h5 class="modal-title" id="verdict-detail-title">
+              <i class="fa fa-list-check text-cyan me-2"></i>판정 상세 내역
+            </h5>
+            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body" id="verdict-detail-body">
+            <div class="text-center text-muted py-5">로딩 중...</div>
+          </div>
+          <div class="modal-footer border-secondary">
+            <span class="text-muted small me-auto">SOAR 트리아지 최근 이력 기준</span>
+            <button type="button" class="btn btn-sm btn-secondary" data-bs-dismiss="modal">닫기</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ 위협 인텔리전스 패널 ════ -->
+    <div id="panel-threat-intel" class="panel-section d-none">
+      <div class="panel-title">
+        <i class="fa fa-virus me-2 text-danger"></i>위협 인텔리전스 (Malicious IP / URL Feeds)
+        <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="refreshThreatIntel()">
+          <i class="fa fa-sync me-1"></i>피드 갱신
+        </button>
+      </div>
+
+      <!-- 가이드 -->
+      <div class="card-panel mb-3" style="border-left:3px solid var(--red); background:rgba(248,81,73,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-red me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          공개 IoC 피드(Feodo Tracker · Spamhaus DROP · URLhaus · OpenPhish)에서 악성 IP·URL을 주기적으로 가져와
+          내부 트래픽과 매칭해 알려줍니다. <strong>매칭이 발생하면 CRITICAL</strong> — 즉시 해당 단말 격리·블록 필요.
+          피드 로딩 실패 시 내장 데모 IoC로 Fallback 됩니다.
+        </div>
+      </div>
+
+      <!-- KPI -->
+      <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="stat-card border-danger">
+          <div class="stat-icon text-danger"><i class="fa fa-ban"></i></div>
+          <div class="stat-value" id="ti-bad-ip">0</div>
+          <div class="stat-label">악성 IP (IoC)</div>
+        </div></div>
+        <div class="col-md-3"><div class="stat-card border-orange">
+          <div class="stat-icon text-orange"><i class="fa fa-link-slash"></i></div>
+          <div class="stat-value text-orange" id="ti-bad-url">0</div>
+          <div class="stat-label">악성 URL (IoC)</div>
+        </div></div>
+        <div class="col-md-3"><div class="stat-card border-warning">
+          <div class="stat-icon text-warning"><i class="fa fa-circle-exclamation"></i></div>
+          <div class="stat-value text-warning" id="ti-total-match">0</div>
+          <div class="stat-label">탐지된 매칭</div>
+        </div></div>
+        <div class="col-md-3"><div class="stat-card border-cyan">
+          <div class="stat-icon text-cyan"><i class="fa fa-clock"></i></div>
+          <div class="stat-value text-cyan" style="font-size:1rem" id="ti-last-refresh">-</div>
+          <div class="stat-label">최종 갱신</div>
+        </div></div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-lg-5"><div class="card-panel h-100">
+          <div class="card-panel-header"><i class="fa fa-chart-pie text-orange me-2"></i>IoC 구성 (IP vs URL)</div>
+          <svg id="ti-donut" width="100%" height="170"></svg>
+        </div></div>
+        <div class="col-lg-7"><div class="card-panel h-100">
+          <div class="card-panel-header"><i class="fa fa-chart-simple text-orange me-2"></i>피드 소스별 IoC 수집량</div>
+          <svg id="ti-bars" width="100%" height="120"></svg>
+        </div></div>
+      </div>
+
+      <div class="row g-3">
+        <!-- 피드 소스 -->
+        <div class="col-lg-5">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-database text-info me-2"></i>피드 소스</div>
+            <div class="table-responsive">
+              <table class="table table-dark table-sm mb-0">
+                <thead><tr><th>이름</th><th>유형</th><th>IoC 수</th><th>상태</th></tr></thead>
+                <tbody id="ti-sources-tbody"><tr><td colspan="4" class="text-muted text-center">로딩 중...</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <!-- 최근 매칭 이벤트 -->
+        <div class="col-lg-7">
+          <div class="card-panel">
+            <div class="card-panel-header">
+              <i class="fa fa-triangle-exclamation text-danger me-2"></i>실시간 매칭 이벤트
+              <span class="ms-auto small text-muted">CRITICAL</span>
+            </div>
+            <div id="ti-match-list" class="small" style="max-height:380px;overflow-y:auto">
+              <div class="text-muted text-center p-3">매칭 대기 중...</div>
+            </div>
+          </div>
+        </div>
+        <!-- 샘플 IoC -->
+        <div class="col-lg-6">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-list text-danger me-2"></i>악성 IP 샘플 (TOP 20)</div>
+            <div id="ti-sample-ips" class="small text-monospace" style="color:#e6edf3;max-height:200px;overflow-y:auto"></div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-link text-orange me-2"></i>악성 URL 샘플 (TOP 20)</div>
+            <div id="ti-sample-urls" class="small text-monospace" style="color:#e6edf3;max-height:200px;overflow-y:auto;word-break:break-all"></div>
+          </div>
+        </div>
+        <!-- IoC 직접 조회 -->
+        <div class="col-12">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-search text-cyan me-2"></i>IoC 직접 조회</div>
+            <div class="row g-2">
+              <div class="col-md-5">
+                <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" id="ti-check-ip" placeholder="IP (예: 45.33.32.156)"/>
+              </div>
+              <div class="col-md-5">
+                <input type="text" class="form-control form-control-sm bg-dark text-white border-secondary" id="ti-check-url" placeholder="URL (예: http://evil.xyz/gate.php)"/>
+              </div>
+              <div class="col-md-2">
+                <button class="btn btn-sm btn-outline-cyan w-100" onclick="checkThreatIntel()">
+                  <i class="fa fa-search me-1"></i>조회
+                </button>
+              </div>
+            </div>
+            <div id="ti-check-result" class="mt-2 small"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ 빈 패널들 (외부 시스템 연동) ════ -->
+    <div id="panel-firewall" class="panel-section d-none">
+      <div class="panel-title"><i class="fa fa-fire me-2 text-orange"></i>방화벽 로그</div>
+      <div class="empty-panel">
+        <i class="fa fa-fire fa-3x text-orange mb-3 opacity-50"></i>
+        <h5>방화벽 연동 대기 중</h5>
+        <p class="text-secondary">방화벽 시스템(Palo Alto, Fortinet, Cisco ASA 등)을 연결하면<br/>실시간 로그가 이곳에 표시됩니다.</p>
+        <div class="connection-info">
+          <code>API_ENDPOINT: /api/integrations/firewall</code><br/>
+          <code>지원 형식: Syslog, REST API, SNMP</code>
+        </div>
+      </div>
+    </div>
+
+    <div id="panel-ips" class="panel-section d-none">
+      <div class="panel-title"><i class="fa fa-shield-virus me-2 text-red"></i>IPS/IDS</div>
+      <div class="empty-panel">
+        <i class="fa fa-shield-virus fa-3x text-danger mb-3 opacity-50"></i>
+        <h5>IPS/IDS 연동 대기 중</h5>
+        <p class="text-secondary">Snort, Suricata, Zeek 등 IPS/IDS 시스템을 연결하면<br/>침입 탐지 이벤트가 이곳에 표시됩니다.</p>
+        <div class="connection-info">
+          <code>API_ENDPOINT: /api/integrations/ips</code><br/>
+          <code>지원 형식: Alert 로그, REST API</code>
+        </div>
+      </div>
+    </div>
+
+    <div id="panel-antivirus" class="panel-section d-none">
+      <div class="panel-title"><i class="fa fa-bug-slash me-2 text-success"></i>백신 서버</div>
+      <div class="empty-panel">
+        <i class="fa fa-bug-slash fa-3x text-success mb-3 opacity-50"></i>
+        <h5>백신 서버 연동 대기 중</h5>
+        <p class="text-secondary">중앙 백신 관리 서버(AhnLab, V3, ESET, Symantec 등)를 연결하면<br/>악성코드 탐지 현황이 이곳에 표시됩니다.</p>
+        <div class="connection-info">
+          <code>API_ENDPOINT: /api/integrations/antivirus</code>
+        </div>
+      </div>
+    </div>
+
+    <div id="panel-edr" class="panel-section d-none">
+      <div class="panel-title">
+        <i class="fa fa-laptop-code me-2 text-info"></i>EDR — AI 기반 엔드포인트 탐지·대응
+        <span class="badge ms-2" id="edr-mode-badge" style="background:#30363d">-</span>
+        <span class="badge bg-dark ms-1" id="edr-host">-</span>
+        <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="loadEdr()">
+          <i class="fa fa-sync me-1"></i>새로고침
+        </button>
+      </div>
+
+      <div class="card-panel mb-3" style="border-left:3px solid var(--info); background:rgba(88,166,255,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-info me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          CrowdStrike Falcon 처럼 <strong>실행 중인 프로세스의 행위를 실시간 감시</strong>합니다.
+          리버스셸·웹셸·크립토 마이너·스캐너 같은 <strong>공격 지표(IOA)</strong>를 룰로 잡아 위험 점수(0~100)를 매기고,
+          HIGH/CRITICAL 탐지는 <strong>AI 트리아지(Claude)로 보내 정탐/오탐을 판정</strong>합니다.
+          위험 프로세스는 격리(종료)할 수 있고, 시스템·대시보드 자신은 안전장치로 보호됩니다.
+          <code id="edr-mode-note"></code>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md col-4"><div class="stat-card stat-sm border-cyan">
+          <div class="stat-value" id="edr-proc-count">0</div><div class="stat-label">감시 프로세스</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-danger">
+          <div class="stat-value text-danger" id="edr-critical">0</div><div class="stat-label">CRITICAL 탐지</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-orange">
+          <div class="stat-value text-orange" id="edr-high">0</div><div class="stat-label">HIGH 탐지</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-purple">
+          <div class="stat-value text-purple" id="edr-detections">0</div><div class="stat-label">총 탐지</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-success">
+          <div class="stat-value text-success" id="edr-responses">0</div><div class="stat-label">격리 대응</div></div></div>
+      </div>
+
+      <!-- Falcon 스타일 프로세스 공격 흐름도 -->
+      <div class="card-panel mb-3">
+        <div class="card-panel-header d-flex align-items-center">
+          <i class="fa fa-sitemap text-info me-2"></i>프로세스 공격 흐름 (Process Tree)
+          <span class="ms-auto small text-muted">부모 → 프로세스 → 공격지표(IOA). 색상 = 위험도</span>
+        </div>
+        <div style="overflow:auto"><svg id="edr-flow" width="100%" height="300" style="min-width:640px; display:block"></svg></div>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-lg-7">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-triangle-exclamation text-danger me-2"></i>위협 탐지 (IOA)</div>
+            <div class="table-responsive" style="max-height:480px; overflow-y:auto">
+              <table class="table table-dark table-sm mb-0" style="font-size:12px">
+                <thead><tr><th>시각</th><th>위험</th><th>프로세스</th><th>탐지 내용</th><th>MITRE</th><th></th></tr></thead>
+                <tbody id="edr-detections-tbody">
+                  <tr><td colspan="6" class="text-muted text-center p-3">로딩 중...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-5">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-list-check text-cyan me-2"></i>프로세스 위험 순위</div>
+            <div class="table-responsive" style="max-height:480px; overflow-y:auto">
+              <table class="table table-dark table-sm mb-0" style="font-size:12px">
+                <thead><tr><th>위험</th><th>PID</th><th>프로세스</th><th>사용자</th></tr></thead>
+                <tbody id="edr-proc-tbody">
+                  <tr><td colspan="4" class="text-muted text-center p-3">로딩 중...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ 네트워크 관제 패널 ════ -->
+    <div id="panel-network" class="panel-section d-none">
+      <div class="panel-title">
+        <i class="fa fa-diagram-project me-2 text-cyan"></i>네트워크 모니터링 관제
+        <span class="badge ms-2" id="net-mode-badge" style="background:#30363d">-</span>
+        <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="loadNetwork()">
+          <i class="fa fa-sync me-1"></i>새로고침
+        </button>
+      </div>
+
+      <div class="card-panel mb-3" style="border-left:3px solid var(--cyan); background:rgba(56,189,248,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-cyan me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          홈서버의 <strong>활성 연결·오픈 포트·대역폭</strong>을 실시간 관제합니다. 외부와 통신하는 IP는
+          <strong>IP 평판(AbuseIPDB)과 자동 교차검증</strong>해 악성 IP 연결을 잡고, 예기치 않은 포트가 열리면 경보합니다.
+          감시 대상 서비스(자동매매 서버 등)의 <strong>가용성(UP/DOWN)·응답시간</strong>도 함께 점검합니다.
+          <code id="net-mode-note"></code>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md col-4"><div class="stat-card stat-sm border-cyan">
+          <div class="stat-value" id="net-established">0</div><div class="stat-label">활성 연결</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-orange">
+          <div class="stat-value text-orange" id="net-listening">0</div><div class="stat-label">오픈 포트</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-purple">
+          <div class="stat-value text-purple" id="net-peers">0</div><div class="stat-label">외부 피어</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-danger">
+          <div class="stat-value text-danger" id="net-malicious">0</div><div class="stat-label">악성 연결</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-success">
+          <div class="stat-value text-success" id="net-bandwidth">0</div><div class="stat-label">수신 (KB/s)</div></div></div>
+      </div>
+
+      <!-- NMS 스타일 네트워크 토폴로지 -->
+      <div class="row g-3 mb-3">
+        <div class="col-lg-8">
+          <div class="card-panel h-100">
+            <div class="card-panel-header d-flex align-items-center">
+              <i class="fa fa-diagram-project text-cyan me-2"></i>네트워크 토폴로지 (실시간 연결)
+              <span class="ms-auto small text-muted">
+                <i class="fa fa-circle" style="color:var(--green);font-size:8px"></i> 내부·Tailscale
+                <i class="fa fa-circle ms-2" style="color:var(--orange);font-size:8px"></i> 외부
+                <i class="fa fa-circle ms-2" style="color:var(--red);font-size:8px"></i> 악성
+              </span>
+            </div>
+            <div style="overflow:auto"><svg id="net-topology" width="100%" height="360" style="min-width:520px; display:block"></svg></div>
+          </div>
+        </div>
+        <div class="col-lg-4">
+          <div class="card-panel h-100">
+            <div class="card-panel-header"><i class="fa fa-heart-pulse text-danger me-2"></i>감시 대상 서비스 상태</div>
+            <div id="net-targets" class="d-flex flex-wrap gap-2 p-2">
+              <div class="text-muted">로딩 중...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-lg-7">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-plug text-cyan me-2"></i>활성 연결</div>
+            <div class="table-responsive" style="max-height:420px; overflow-y:auto">
+              <table class="table table-dark table-sm mb-0" style="font-size:12px">
+                <thead><tr><th>로컬</th><th>원격</th><th>상태</th><th>프로세스</th></tr></thead>
+                <tbody id="net-conns-tbody">
+                  <tr><td colspan="4" class="text-muted text-center p-3">로딩 중...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-5">
+          <div class="card-panel mb-3">
+            <div class="card-panel-header"><i class="fa fa-door-open text-orange me-2"></i>리스닝(오픈) 포트</div>
+            <div class="table-responsive" style="max-height:180px; overflow-y:auto">
+              <table class="table table-dark table-sm mb-0" style="font-size:12px">
+                <thead><tr><th>포트</th><th>주소</th><th>프로세스</th></tr></thead>
+                <tbody id="net-listen-tbody">
+                  <tr><td colspan="3" class="text-muted text-center p-3">로딩 중...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-bell text-danger me-2"></i>네트워크 이벤트</div>
+            <div id="net-events" style="max-height:200px; overflow-y:auto">
+              <div class="text-muted p-2">이벤트 없음</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ 퍼플팀 검증 패널 ════ -->
+    <div id="panel-purple" class="panel-section d-none">
+      <div class="panel-title">
+        <i class="fa fa-flask-vial me-2 text-purple"></i>퍼플팀 공격 시뮬레이션 — 탐지 검증
+        <span class="badge ms-2" id="purple-cov-badge" style="background:#30363d">커버리지 -</span>
+        <button class="btn btn-xs btn-outline-purple ms-auto" onclick="runPurpleAll()">
+          <i class="fa fa-play me-1"></i>전체 실행
+        </button>
+      </div>
+
+      <div class="card-panel mb-3" style="border-left:3px solid var(--purple); background:rgba(157,121,242,.06);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-purple me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          안전한 <strong>모의 공격</strong>(리버스셸·웹셸·마이너·스캐너·브루트포스·악성IP 통신)을 실제 탐지 엔진에 주입해
+          <strong>구축한 탐지 파이프라인(Sigma·EDR·auth.log·평판·네트워크)이 정말 잡는지 검증</strong>합니다.
+          잡으면 <span class="text-success">PASS</span>, 놓치면 <span class="text-danger">FAIL</span> → 탐지 커버리지(%).
+          실제 공격은 하지 않으며 출발지는 문서용 TEST-NET(203.0.113.x) IP만 사용합니다. 룰/임계값을 바꾼 뒤 여기서 회귀 검증하세요.
+        </div>
+      </div>
+
+      <!-- 공격 → 탐지 흐름 시각화 -->
+      <div class="card-panel mb-3">
+        <div class="card-panel-header"><i class="fa fa-diagram-project text-purple me-2"></i>공격 → 탐지 파이프라인 흐름</div>
+        <div style="overflow-x:auto"><svg id="purple-flow" width="100%" height="150" style="min-width:720px"></svg></div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md-3 col-6"><div class="stat-card stat-sm border-purple">
+          <div class="stat-value text-purple" id="purple-coverage">-</div><div class="stat-label">탐지 커버리지 %</div></div></div>
+        <div class="col-md-3 col-6"><div class="stat-card stat-sm border-success">
+          <div class="stat-value text-success" id="purple-passed">-</div><div class="stat-label">PASS</div></div></div>
+        <div class="col-md-3 col-6"><div class="stat-card stat-sm border-danger">
+          <div class="stat-value text-danger" id="purple-failed">-</div><div class="stat-label">FAIL</div></div></div>
+        <div class="col-md-3 col-6"><div class="stat-card stat-sm border-cyan">
+          <div class="stat-value" id="purple-runs">0</div><div class="stat-label">실행 횟수</div></div></div>
+      </div>
+
+      <div class="card-panel">
+        <div class="card-panel-header"><i class="fa fa-list-check text-purple me-2"></i>시나리오별 결과</div>
+        <div class="table-responsive">
+          <table class="table table-dark table-sm mb-0" style="font-size:12.5px">
+            <thead><tr><th>결과</th><th>공격 시나리오</th><th>MITRE</th><th>기대 탐지기</th><th>탐지 상세</th><th></th></tr></thead>
+            <tbody id="purple-tbody">
+              <tr><td colspan="6" class="text-muted text-center p-3">"전체 실행"을 눌러 탐지 검증을 시작하세요</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ 일일 AI 리포트 패널 ════ -->
+    <div id="panel-report" class="panel-section d-none">
+      <div class="panel-title">
+        <i class="fa fa-file-lines me-2 text-cyan"></i>일일 AI 리포트 — 관제 브리핑
+        <span class="badge ms-2" id="report-mode-badge" style="background:#30363d">-</span>
+        <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="generateReport()">
+          <i class="fa fa-wand-magic-sparkles me-1"></i>지금 생성
+        </button>
+      </div>
+
+      <div class="card-panel mb-3" style="border-left:3px solid var(--cyan); background:rgba(56,189,248,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-cyan me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          하루 동안 쌓인 <strong>알림·정탐/오탐·EDR·Sigma·네트워크·인증·차단</strong> 지표를 모아
+          <strong>Claude가 자연어 브리핑</strong>으로 요약합니다(매일 <span id="report-hour" class="text-warning">08</span>시 자동 + 수동 생성).
+          아침에 이 한 장만 보면 밤새 무슨 일이 있었는지, 오늘 뭘 해야 하는지 파악됩니다.
+          API 키가 없으면 규칙 기반 요약으로 대체됩니다. <code id="report-mode-note"></code>
+        </div>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-lg-4">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-clock-rotate-left text-cyan me-2"></i>리포트 이력</div>
+            <div id="report-history" style="max-height:520px; overflow-y:auto">
+              <div class="text-muted p-2">로딩 중...</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-8">
+          <div class="card-panel">
+            <div class="card-panel-header d-flex align-items-center">
+              <i class="fa fa-file-lines text-cyan me-2"></i><span id="report-title">최신 리포트</span>
+              <span class="badge bg-dark ms-2" id="report-generated"></span>
+            </div>
+            <div class="row g-2 p-2" id="report-kpis"></div>
+            <div class="p-2">
+              <pre id="report-briefing" class="small p-3 mb-0" style="white-space:pre-wrap; line-height:1.7; color:#e6edf3; background:#0d1117; border-radius:6px; max-height:440px; overflow:auto;">리포트를 생성하거나 이력에서 선택하세요.</pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ Sigma 룰 엔진 패널 ════ -->
+    <div id="panel-sigma" class="panel-section d-none">
+      <div class="panel-title">
+        <i class="fa fa-file-shield me-2 text-cyan"></i>Sigma 룰 엔진 — 업계 표준 탐지룰
+        <span class="badge ms-2" id="sigma-mode-badge" style="background:#30363d">-</span>
+        <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="reloadSigma()">
+          <i class="fa fa-sync me-1"></i>룰 재로드
+        </button>
+      </div>
+
+      <div class="card-panel mb-3" style="border-left:3px solid var(--cyan); background:rgba(56,189,248,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-cyan me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          <strong>Sigma</strong>는 SIEM 중립적인 <strong>YAML 탐지룰 표준</strong>입니다(SigmaHQ). <code>data/sigma/*.yml</code>의
+          룰을 로드해 EDR이 관측한 <strong>프로세스 이벤트를 표준 룰로 매칭</strong>하고, 매치되면 AI 트리아지 파이프라인에 넣습니다.
+          룰 파일만 추가하면 코드 수정 없이 탐지가 늘어납니다. HIGH/CRITICAL 매치는 정탐/오탐 AI 판정으로 이어집니다.
+          <code id="sigma-mode-note"></code>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md col-4"><div class="stat-card stat-sm border-cyan">
+          <div class="stat-value" id="sigma-rules">0</div><div class="stat-label">로드된 룰</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-danger">
+          <div class="stat-value text-danger" id="sigma-matches">0</div><div class="stat-label">총 매치</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-purple">
+          <div class="stat-value text-purple" id="sigma-evals">0</div><div class="stat-label">평가 횟수</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-orange">
+          <div class="stat-value text-orange" id="sigma-errors">0</div><div class="stat-label">룰 오류</div></div></div>
+      </div>
+
+      <div class="card-panel mb-3">
+        <div class="card-panel-header"><i class="fa fa-chart-simple text-purple me-2"></i>심각도(level)별 룰 분포</div>
+        <svg id="sigma-bars" width="100%" height="96"></svg>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-lg-5">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-list-ul text-cyan me-2"></i>로드된 룰</div>
+            <div class="table-responsive" style="max-height:460px; overflow-y:auto">
+              <table class="table table-dark table-sm mb-0" style="font-size:12px">
+                <thead><tr><th>레벨</th><th>룰</th><th>MITRE</th><th>사용</th></tr></thead>
+                <tbody id="sigma-rules-tbody">
+                  <tr><td colspan="4" class="text-muted text-center p-3">로딩 중...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-7">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-bullseye text-danger me-2"></i>룰 매치 (탐지)</div>
+            <div class="table-responsive" style="max-height:460px; overflow-y:auto">
+              <table class="table table-dark table-sm mb-0" style="font-size:12px">
+                <thead><tr><th>시각</th><th>레벨</th><th>룰</th><th>프로세스/명령</th><th>MITRE</th></tr></thead>
+                <tbody id="sigma-matches-tbody">
+                  <tr><td colspan="5" class="text-muted text-center p-3">매치 없음</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ 취약점 스캔 (포트/서비스/CVE) 패널 ════ -->
+    <div id="panel-vulnscan" class="panel-section d-none">
+      <div class="panel-title">
+        <i class="fa fa-magnifying-glass-chart me-2 text-danger"></i>취약점 스캔 — 포트 · 서비스 · CVE
+        <span class="badge ms-2" id="vuln-mode-badge" style="background:#30363d">-</span>
+        <span class="badge ms-1" id="vuln-engine-badge" style="background:#30363d">-</span>
+      </div>
+
+      <div class="card-panel mb-3" style="border-left:3px solid var(--cyan); background:rgba(56,189,248,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-cyan me-2"></i>어떻게 동작하나
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          선택 서버의 <strong>열린 TCP 포트</strong>를 찾아 <strong>서비스/버전</strong>을 식별하고, 알려진 <strong>CVE</strong>와 위험 노출을 매핑합니다.
+          <strong>connect() 스캔만 사용</strong>하는 비파괴 점검이라 운영 중 자동매매 서버에도 안전합니다.
+          <code>nmap</code>이 있으면 정밀 서비스 탐지(+vulners 설치 시 CVE)를, 없으면 파이썬 소켓 배너 스캔으로 동작합니다.
+          <code id="vuln-mode-note"></code>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md col-4"><div class="stat-card stat-sm border-cyan">
+          <div class="stat-value" id="vuln-open">0</div><div class="stat-label">열린 포트</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-orange">
+          <div class="stat-value text-orange" id="vuln-total">0</div><div class="stat-label">발견 취약점</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-danger">
+          <div class="stat-value text-danger" id="vuln-high">0</div><div class="stat-label">High 이상</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-purple">
+          <div class="stat-value text-purple" id="vuln-hosts">0</div><div class="stat-label">대상 서버</div></div></div>
+      </div>
+
+      <!-- 대상 서버 선택 -->
+      <div class="card-panel mb-3">
+        <div class="card-panel-header d-flex align-items-center">
+          <i class="fa fa-server text-cyan me-2"></i>대상 서버
+          <span class="ms-auto d-flex gap-1">
+            <button class="btn btn-xs btn-outline-secondary" onclick="vulnSelectAllHosts(true)">전체선택</button>
+            <button class="btn btn-xs btn-outline-secondary" onclick="vulnSelectAllHosts(false)">해제</button>
+          </span>
+        </div>
+        <div id="vuln-hosts-list" class="d-flex flex-wrap gap-3">
+          <span class="text-muted small">로딩 중...</span>
+        </div>
+        <div class="d-flex flex-wrap gap-2 align-items-center mt-3">
+          <button class="btn btn-sm btn-outline-danger" id="vuln-scan-btn" onclick="vulnScan()">
+            <i class="fa fa-radar me-1"></i>선택 서버 스캔</button>
+          <span class="small text-muted" id="vuln-scan-status"></span>
+          <span class="small text-muted ms-auto" style="font-size:10.5px">
+            대상은 <code>ANSIBLE_TARGETS</code> 공유 · 포트셋은 <code>VULN_SCAN_PORTS</code>로 조정</span>
+        </div>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-lg-8">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-list-check text-danger me-2"></i>스캔 결과 (서버별 열린 포트 · CVE)</div>
+            <div id="vuln-results" style="max-height:520px; overflow-y:auto">
+              <div class="text-muted p-3 text-center">아직 스캔하지 않았습니다. 대상 선택 후 <strong>스캔</strong>을 누르세요.</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-4">
+          <div class="card-panel mb-3">
+            <div class="card-panel-header"><i class="fa fa-chart-simple text-orange me-2"></i>심각도 분포</div>
+            <svg id="vuln-sev-bars" width="100%" height="120"></svg>
+          </div>
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-clock-rotate-left text-cyan me-2"></i>스캔 이력</div>
+            <div id="vuln-history" style="max-height:220px; overflow-y:auto">
+              <div class="text-muted p-2">이력 없음</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ 웹 퍼징 (견고성) 패널 ════ -->
+    <div id="panel-fuzz" class="panel-section d-none">
+      <div class="panel-title">
+        <i class="fa fa-bug me-2 text-danger"></i>웹 엔드포인트 퍼징 — 견고성 점검
+        <span class="badge ms-2" id="fuzz-engine-badge" style="background:#30363d">-</span>
+        <button class="btn btn-xs btn-outline-danger ms-auto" onclick="fuzzStop()">
+          <i class="fa fa-stop me-1"></i>중단</button>
+      </div>
+
+      <div class="card-panel mb-3" style="border-left:3px solid var(--orange); background:rgba(247,144,0,.06);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-triangle-exclamation text-orange me-2"></i>본인 소유 서버만 · 안전 우선
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          엔드포인트에 <strong>비정상 입력</strong>(경계값·특수문자·오버플로·인젝션 마커)을 보내 서버가 안전하게 처리하는지 봅니다 — 목적은 <strong>방어 관점의 결함 발견</strong>(5xx·행·입력반사).
+          <strong>사설/loopback/Tailscale 대상만</strong> 허용(공인 IP 거부), 기본 <strong>GET 전용</strong>(매매 트리거 없음),
+          <strong id="fuzz-rate-note">rate limit</strong>으로 부하를 억제합니다.
+          POST 등 쓰기 메서드는 <code>.env FUZZ_ALLOW_WRITE=True</code> 필요. <code id="fuzz-mode-note"></code>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md col-4"><div class="stat-card stat-sm border-cyan">
+          <div class="stat-value" id="fuzz-requests">0</div><div class="stat-label">전송 요청</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-danger">
+          <div class="stat-value text-danger" id="fuzz-5xx">0</div><div class="stat-label">5xx / 미처리</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-orange">
+          <div class="stat-value text-orange" id="fuzz-timeouts">0</div><div class="stat-label">응답없음</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-purple">
+          <div class="stat-value text-purple" id="fuzz-reflections">0</div><div class="stat-label">입력 반사</div></div></div>
+      </div>
+
+      <!-- 실행 설정 -->
+      <div class="card-panel mb-3">
+        <div class="card-panel-header"><i class="fa fa-sliders text-cyan me-2"></i>퍼징 대상 · 설정</div>
+        <div class="row g-2 align-items-end">
+          <div class="col-md-4">
+            <label class="small text-muted d-block mb-1">대상 서버</label>
+            <select id="fuzz-target" class="form-select form-select-sm"></select>
+          </div>
+          <div class="col-md-4">
+            <label class="small text-muted d-block mb-1">경로 (쉼표 구분)</label>
+            <input type="text" id="fuzz-paths" class="form-control form-control-sm font-monospace"
+                   value="/, /login, /api/whoami" placeholder="/, /login">
+          </div>
+          <div class="col-md-2">
+            <label class="small text-muted d-block mb-1">파라미터</label>
+            <input type="text" id="fuzz-params" class="form-control form-control-sm font-monospace"
+                   value="q" placeholder="q,id">
+          </div>
+          <div class="col-md-2">
+            <label class="small text-muted d-block mb-1">메서드</label>
+            <select id="fuzz-method" class="form-select form-select-sm">
+              <option value="GET">GET</option>
+              <option value="POST">POST (쓰기)</option>
+            </select>
+          </div>
+        </div>
+        <div class="d-flex align-items-center gap-2 mt-3">
+          <button class="btn btn-sm btn-outline-danger" id="fuzz-run-btn" onclick="fuzzRun()">
+            <i class="fa fa-play me-1"></i>퍼징 시작</button>
+          <span class="small text-muted" id="fuzz-run-status"></span>
+          <span class="small text-muted ms-auto" style="font-size:10.5px">
+            페이로드 <span id="fuzz-payload-count">-</span>종 · 대상은 <code>FUZZ_TARGETS</code>/<code>NET_MONITOR_TARGETS</code></span>
+        </div>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-lg-8">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-list-check text-danger me-2"></i>발견 (견고성 결함)</div>
+            <div class="table-responsive" style="max-height:460px; overflow-y:auto">
+              <table class="table table-dark table-sm mb-0" style="font-size:12px">
+                <thead><tr><th>시각</th><th>유형</th><th>경로</th><th>페이로드</th><th>응답</th><th>설명</th></tr></thead>
+                <tbody id="fuzz-findings-tbody">
+                  <tr><td colspan="6" class="text-muted text-center p-3">아직 실행하지 않았습니다.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-4">
+          <div class="card-panel mb-3">
+            <div class="card-panel-header"><i class="fa fa-chart-simple text-orange me-2"></i>발견 유형 분포</div>
+            <svg id="fuzz-type-bars" width="100%" height="110"></svg>
+          </div>
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-clock-rotate-left text-cyan me-2"></i>실행 이력</div>
+            <div id="fuzz-history" style="max-height:220px; overflow-y:auto">
+              <div class="text-muted p-2">이력 없음</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ 취약점 패치 (Ansible) 패널 ════ -->
+    <div id="panel-patch" class="panel-section d-none">
+      <div class="panel-title">
+        <i class="fa fa-shield-halved me-2 text-warning"></i>자동화 취약점 패치 — Ansible
+        <span class="badge ms-2" id="patch-mode-badge" style="background:#30363d">-</span>
+        <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="loadPatch(true)">
+          <i class="fa fa-sync me-1"></i>재스캔
+        </button>
+      </div>
+
+      <div class="card-panel mb-3" style="border-left:3px solid var(--orange); background:rgba(247,144,0,.06);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-triangle-exclamation text-orange me-2"></i>운영 중 자동매매 서버 — 안전 우선
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          미적용 보안 업데이트를 스캔하고 <strong>Ansible 플레이북</strong>으로 패치를 자동화합니다.
+          스캔은 읽기 전용(안전)이지만, <strong>실제 패치는 자동매매 봇을 중단시킬 수 있어 자동 실행하지 않습니다.</strong>
+          기본은 <strong>dry-run(--check)</strong>으로 무엇이 바뀌는지만 확인하고, 실제 적용은 점검 시간대에 수동으로.
+          실제 적용을 켜려면 <code>.env PATCH_APPLY_ENABLED=True</code> + ansible + passwordless sudo 필요.
+          <code id="patch-mode-note"></code>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md col-4"><div class="stat-card stat-sm border-orange">
+          <div class="stat-value text-orange" id="patch-upgradable">0</div><div class="stat-label">업그레이드 가능</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-danger">
+          <div class="stat-value text-danger" id="patch-security">0</div><div class="stat-label">보안 패치</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-cyan">
+          <div class="stat-value" id="patch-jobs">0</div><div class="stat-label">실행 작업</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-purple">
+          <div class="stat-value text-purple" id="patch-ansible">-</div><div class="stat-label">Ansible</div></div></div>
+      </div>
+
+      <div class="card-panel mb-3">
+        <div class="card-panel-header"><i class="fa fa-chart-pie text-orange me-2"></i>업데이트 구성 (보안 vs 일반)</div>
+        <svg id="patch-donut" width="100%" height="150"></svg>
+      </div>
+
+      <!-- 대상 서버 선택 -->
+      <div class="card-panel mb-3">
+        <div class="card-panel-header d-flex align-items-center">
+          <i class="fa fa-server text-cyan me-2"></i>대상 서버
+          <span class="ms-auto d-flex gap-1">
+            <button class="btn btn-xs btn-outline-secondary" onclick="patchSelectAllHosts(true)">전체선택</button>
+            <button class="btn btn-xs btn-outline-secondary" onclick="patchSelectAllHosts(false)">해제</button>
+          </span>
+        </div>
+        <div id="patch-hosts" class="d-flex flex-wrap gap-3">
+          <span class="text-muted small">로딩 중...</span>
+        </div>
+        <div class="small text-muted mt-2" style="font-size:10.5px">
+          원격 서버는 <code>.env ANSIBLE_TARGETS="이름=user@host;..."</code> 로 추가 (localhost는 항상 포함).
+        </div>
+      </div>
+
+      <!-- 일괄 패치 실행 -->
+      <div class="mb-3 d-flex flex-wrap gap-2 align-items-center">
+        <button class="btn btn-sm btn-outline-cyan" onclick="patchPlaybook()">
+          <i class="fa fa-file-code me-1"></i>플레이북 생성/보기</button>
+        <button class="btn btn-sm btn-outline-warning" onclick="patchRun('check')">
+          <i class="fa fa-vial me-1"></i>Dry-run (선택 서버 점검)</button>
+        <button class="btn btn-sm btn-outline-danger" onclick="patchRun('apply')">
+          <i class="fa fa-download me-1"></i>일괄 실제 적용</button>
+        <span class="small text-muted ms-2">보안 패치만 대상 (권장)</span>
+      </div>
+
+      <!-- 일괄 ad-hoc 명령 -->
+      <div class="card-panel mb-3" style="border-left:3px solid var(--cyan);">
+        <div class="card-panel-header"><i class="fa fa-terminal text-cyan me-2"></i>선택 서버에 명령 일괄 실행 (Ansible ad-hoc)</div>
+        <div class="d-flex flex-wrap gap-2 align-items-center">
+          <input type="text" id="patch-cmd-input" class="form-control form-control-sm font-monospace flex-fill"
+                 style="min-width:220px" placeholder="예: uptime · df -h · systemctl status trader"
+                 onkeydown="if(event.key==='Enter')patchCommand('check')">
+          <button class="btn btn-sm btn-outline-warning" onclick="patchCommand('check')">
+            <i class="fa fa-eye me-1"></i>미리보기</button>
+          <button class="btn btn-sm btn-outline-danger" onclick="patchCommand('apply')">
+            <i class="fa fa-bolt me-1"></i>실행</button>
+        </div>
+        <div class="small text-muted mt-2" style="font-size:10.5px">
+          기본은 <strong>미리보기(실행 안 함)</strong>. 실제 실행은 <code>PATCH_APPLY_ENABLED=True</code> 필요 +
+          파괴적 명령(rm -rf, reboot 등)은 자동 차단됩니다.
+        </div>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-lg-6">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-list text-orange me-2"></i>취약 패키지 인벤토리</div>
+            <div class="table-responsive" style="max-height:420px; overflow-y:auto">
+              <table class="table table-dark table-sm mb-0" style="font-size:12px">
+                <thead><tr><th>패키지</th><th>현재→대상</th><th>구분</th></tr></thead>
+                <tbody id="patch-inv-tbody">
+                  <tr><td colspan="3" class="text-muted text-center p-3">로딩 중...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="card-panel mb-3">
+            <div class="card-panel-header"><i class="fa fa-clock-rotate-left text-cyan me-2"></i>작업 이력</div>
+            <div id="patch-jobs-list" style="max-height:180px; overflow-y:auto">
+              <div class="text-muted p-2">작업 없음</div>
+            </div>
+          </div>
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-terminal text-cyan me-2"></i>출력 (플레이북/로그)</div>
+            <pre id="patch-output" class="small p-2 mb-0" style="max-height:240px; overflow:auto; color:#8ff0a4; background:#0d1117; white-space:pre-wrap;">버튼을 눌러 플레이북 생성 또는 dry-run 하세요.</pre>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ 푸시 알림 (ntfy) 패널 ════ -->
+    <div id="panel-notify" class="panel-section d-none">
+      <div class="panel-title">
+        <i class="fa fa-bell me-2 text-cyan"></i>푸시 알림 — ntfy
+        <span class="badge ms-2" id="notify-mode-badge" style="background:#30363d">-</span>
+        <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="loadNotify()">
+          <i class="fa fa-sync me-1"></i>새로고침
+        </button>
+      </div>
+
+      <div class="card-panel mb-3" style="border-left:3px solid var(--cyan); background:rgba(56,189,248,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-cyan me-2"></i>설정 방법 & 왜 이렇게?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          폰에 <strong>ntfy 앱</strong>(App Store/Play)을 설치하고 원하는 토픽을 구독한 뒤,
+          <code>.env</code>에 <code>NTFY_ENABLED=True</code>·<code>NTFY_TOPIC=&lt;토픽&gt;</code>을 넣고 재시작하면 됩니다.
+          <strong>모든 알림을 보내지 않습니다 — AI가 '정탐' 판정한 위협과 자동 차단만</strong> 폰으로 보냅니다.
+          오탐 스팸 없이 진짜 위협만 손에 들어오게 하는 것이 이 프로젝트의 핵심(정탐/오탐 구분)과 같은 철학입니다.
+          기본 임계값 <span id="notify-minsev" class="text-warning">CRITICAL</span> 이상, 동일 알림은 쿨다운으로 억제.
+          <code id="notify-mode-note"></code>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md col-4"><div class="stat-card stat-sm border-success">
+          <div class="stat-value text-success" id="notify-sent">0</div><div class="stat-label">전송</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-orange">
+          <div class="stat-value text-orange" id="notify-suppressed">0</div><div class="stat-label">쿨다운 억제</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-danger">
+          <div class="stat-value text-danger" id="notify-failed">0</div><div class="stat-label">실패</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-cyan">
+          <div class="stat-value" id="notify-server" style="font-size:13px">-</div><div class="stat-label">서버</div></div></div>
+      </div>
+
+      <div class="card-panel mb-3">
+        <div class="card-panel-header"><i class="fa fa-chart-simple text-cyan me-2"></i>알림 전송 현황</div>
+        <svg id="notify-bars" width="100%" height="96"></svg>
+      </div>
+
+      <div class="mb-3">
+        <button class="btn btn-sm btn-outline-cyan" onclick="notifyTest()">
+          <i class="fa fa-paper-plane me-1"></i>테스트 알림 보내기</button>
+        <span id="notify-test-result" class="small ms-2 text-muted"></span>
+      </div>
+
+      <div class="card-panel">
+        <div class="card-panel-header"><i class="fa fa-clock-rotate-left text-cyan me-2"></i>알림 이력</div>
+        <div class="table-responsive" style="max-height:420px; overflow-y:auto">
+          <table class="table table-dark table-sm mb-0" style="font-size:12px">
+            <thead><tr><th>시각</th><th>심각도</th><th>제목</th><th>전송</th></tr></thead>
+            <tbody id="notify-hist-tbody">
+              <tr><td colspan="4" class="text-muted text-center p-3">이력 없음</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ 내 정보 패널 ════ -->
+    <div id="panel-myinfo" class="panel-section d-none">
+      <div class="panel-title d-flex align-items-center">
+        <i class="fa fa-id-card me-2 text-cyan"></i>내 정보 (시스템 · 네트워크)
+        <span class="ms-auto small" style="color:#e6edf3" id="myinfo-last-update">최종 조회 —</span>
+        <button class="btn btn-sm btn-outline-cyan ms-3" onclick="loadMyInfo(true)">
+          <i class="fa fa-rotate-right me-1"></i>새로고침
+        </button>
+      </div>
+
+      <!-- 가이드 -->
+      <div class="card-panel mb-3" style="border-left:3px solid var(--cyan); background:rgba(57,208,216,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-cyan me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          현재 대시보드가 돌아가는 <strong>내 PC</strong>의 식별 정보를 한곳에 모아두는 탭입니다.
+          <strong>공인 IP</strong>는 외부에서 나를 보는 주소이고, <strong>사설 IP</strong>는 내부 네트워크 주소입니다.
+          로그에 이 IP가 <em>공격자/대상</em>으로 찍힌다면 <span class="text-danger">내 장비에 의심 트래픽</span>이 발생한 것이니 <strong>패킷 분석</strong>·<strong>Sysmon</strong> 탭에서 교차 확인하세요.
+          CPU/메모리/디스크가 갑자기 튀면 랜섬웨어·크립토마이너 가능성도 고려합니다.
+        </div>
+      </div>
+
+      <!-- 히어로 카드: 공인 IP + 위치 -->
+      <div class="myinfo-hero mb-3">
+        <div class="myinfo-hero-left">
+          <div class="myinfo-hero-label"><i class="fa fa-globe me-2"></i>내 공인 IP (외부에서 보는 주소)</div>
+          <div class="myinfo-hero-ip font-monospace" id="myinfo-public-ip">—</div>
+          <div class="myinfo-hero-sub">
+            <span id="myinfo-geo"><i class="fa fa-location-dot me-1"></i>위치 조회 중…</span>
+            <span class="mx-2" style="opacity:.4">|</span>
+            <span id="myinfo-isp">ISP —</span>
+          </div>
+        </div>
+        <div class="myinfo-hero-right">
+          <div class="myinfo-hero-mini">
+            <div class="myinfo-mini-label">사설 IP</div>
+            <div class="myinfo-mini-val font-monospace" id="myinfo-private-ip">—</div>
+            <div class="myinfo-mini-sub" id="myinfo-private-ip-all">보조 —</div>
+          </div>
+          <div class="myinfo-hero-mini">
+            <div class="myinfo-mini-label">호스트</div>
+            <div class="myinfo-mini-val font-monospace" id="myinfo-hostname">—</div>
+            <div class="myinfo-mini-sub" id="myinfo-username">user —</div>
+          </div>
+          <div class="myinfo-hero-mini">
+            <div class="myinfo-mini-label">MAC</div>
+            <div class="myinfo-mini-val font-monospace" id="myinfo-mac">—</div>
+            <div class="myinfo-mini-sub">L2 주소</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 시스템 + 리소스 -->
+      <div class="row g-3">
+        <div class="col-lg-6">
+          <div class="card-panel h-100">
+            <div class="card-panel-header"><i class="fa fa-microchip me-2 text-cyan"></i>시스템</div>
+            <div class="kv-grid" id="myinfo-system-grid">
+              <div class="kv-placeholder">로딩중…</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="card-panel h-100">
+            <div class="card-panel-header"><i class="fa fa-gauge me-2 text-cyan"></i>리소스</div>
+            <div id="myinfo-resource-box">
+              <div class="kv-placeholder">로딩중…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 네트워크 인터페이스 -->
+      <div class="card-panel mt-3">
+        <div class="card-panel-header"><i class="fa fa-ethernet me-2 text-cyan"></i>네트워크 인터페이스</div>
+        <div id="myinfo-iface-list">
+          <div class="kv-placeholder">로딩중…</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="panel-siem" class="panel-section d-none">
+      <div class="panel-title">
+        <i class="fa fa-server me-2 text-cyan"></i>SIEM — 외부 접근 로그 수집
+        <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="loadSiem()">
+          <i class="fa fa-sync me-1"></i>새로고침
+        </button>
+      </div>
+
+      <!-- 가이드 -->
+      <div class="card-panel mb-3" style="border-left:3px solid var(--cyan); background:rgba(56,189,248,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-cyan me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          자동매매 KR / USA 프로젝트 웹서버의 access log를 실시간 수집해 통합 분석합니다.
+          TLS 프로브·HTTP/2 프로브·경로 스캔 등 <strong>의심 요청은 자동 분류</strong>되어
+          MITRE ATT&amp;CK(T1595 Active Scanning)과 공격 지도에 반영됩니다.
+          로그 파일이 없으면 데모 이벤트로 Fallback 됩니다.
+        </div>
+      </div>
+
+      <!-- KPI -->
+      <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="stat-card border-cyan">
+          <div class="stat-icon text-cyan"><i class="fa fa-file-lines"></i></div>
+          <div class="stat-value" id="siem-total">0</div>
+          <div class="stat-label">수집 이벤트</div>
+        </div></div>
+        <div class="col-md-3"><div class="stat-card border-danger">
+          <div class="stat-icon text-danger"><i class="fa fa-user-ninja"></i></div>
+          <div class="stat-value text-danger" id="siem-suspicious">0</div>
+          <div class="stat-label">의심 이벤트</div>
+        </div></div>
+        <div class="col-md-3"><div class="stat-card border-warning">
+          <div class="stat-icon text-warning"><i class="fa fa-network-wired"></i></div>
+          <div class="stat-value text-warning" id="siem-unique-ips">0</div>
+          <div class="stat-label">고유 출발지 IP</div>
+        </div></div>
+        <div class="col-md-3"><div class="stat-card border-success">
+          <div class="stat-icon text-success"><i class="fa fa-plug"></i></div>
+          <div class="stat-value text-success" id="siem-sources-ok">0</div>
+          <div class="stat-label">연결된 소스</div>
+        </div></div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-lg-5"><div class="card-panel h-100">
+          <div class="card-panel-header"><i class="fa fa-chart-pie text-cyan me-2"></i>정상 vs 의심 요청</div>
+          <svg id="siem-donut" width="100%" height="170"></svg>
+        </div></div>
+        <div class="col-lg-7"><div class="card-panel h-100">
+          <div class="card-panel-header"><i class="fa fa-chart-simple text-cyan me-2"></i>소스별 이벤트 · 의심</div>
+          <svg id="siem-bars" width="100%" height="120"></svg>
+        </div></div>
+      </div>
+
+      <div class="row g-3">
+        <!-- 소스 상태 + TOP IP -->
+        <div class="col-lg-4">
+          <div class="card-panel mb-3">
+            <div class="card-panel-header"><i class="fa fa-database text-info me-2"></i>로그 소스</div>
+            <div class="table-responsive">
+              <table class="table table-dark table-sm mb-0">
+                <thead><tr><th>소스</th><th>이벤트</th><th>의심</th><th>상태</th></tr></thead>
+                <tbody id="siem-sources-tbody">
+                  <tr><td colspan="4" class="text-muted text-center">로딩 중...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-user-ninja text-danger me-2"></i>TOP 출발지 IP</div>
+            <div id="siem-top-ips" style="max-height:260px; overflow-y:auto">
+              <div class="text-muted p-2">데이터 없음</div>
+            </div>
+          </div>
+        </div>
+        <!-- 이벤트 로그 -->
+        <div class="col-lg-8">
+          <div class="card-panel">
+            <div class="card-panel-header d-flex align-items-center">
+              <i class="fa fa-list text-cyan me-2"></i>접근 이벤트
+              <div class="form-check form-switch ms-auto small">
+                <input class="form-check-input" type="checkbox" id="siem-suspicious-only"
+                       onchange="renderSiemEvents()">
+                <label class="form-check-label small" for="siem-suspicious-only">의심만 보기</label>
+              </div>
+            </div>
+            <div class="table-responsive" style="max-height:560px; overflow-y:auto">
+              <table class="table table-dark table-sm mb-0" style="font-size:12px">
+                <thead><tr><th>시각</th><th>소스</th><th>IP</th><th>요청</th><th>상태</th><th>분류</th></tr></thead>
+                <tbody id="siem-events-tbody">
+                  <tr><td colspan="6" class="text-muted text-center p-3">로딩 중...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ SSH 인증 로그 패널 ════ -->
+    <div id="panel-authlog" class="panel-section d-none">
+      <div class="panel-title">
+        <i class="fa fa-key me-2 text-cyan"></i>SSH 인증 로그 — 실시간 로그인 관제
+        <span class="badge ms-2" id="authlog-mode-badge" style="background:#30363d">-</span>
+        <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="loadAuthlog()">
+          <i class="fa fa-sync me-1"></i>새로고침
+        </button>
+      </div>
+
+      <div class="card-panel mb-3" style="border-left:3px solid var(--cyan); background:rgba(56,189,248,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-cyan me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          홈서버 <code>/var/log/auth.log</code>를 실시간 감시합니다. 누가 SSH로 로그인하는지(성공/실패/무효 계정)를 보여주고,
+          <strong>동일 IP가 짧은 시간에 반복 실패하면 무차별 대입(BRUTE_FORCE)으로 판정</strong>해 알림 파이프라인
+          (AI 트리아지 → SOAR 자동 차단 → 인시던트)에 자동으로 넣습니다. 사설·Tailscale IP는 집계에서 제외됩니다.
+          <code id="authlog-mode-note"></code>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md col-4"><div class="stat-card stat-sm border-cyan">
+          <div class="stat-value" id="auth-total">0</div><div class="stat-label">총 시도</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-danger">
+          <div class="stat-value text-danger" id="auth-failed">0</div><div class="stat-label">실패</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-orange">
+          <div class="stat-value text-orange" id="auth-invalid">0</div><div class="stat-label">무효 계정</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-success">
+          <div class="stat-value text-success" id="auth-accepted">0</div><div class="stat-label">성공</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-danger">
+          <div class="stat-value text-danger" id="auth-brute">0</div><div class="stat-label">브루트포스 알림</div></div></div>
+      </div>
+
+      <div class="card-panel mb-3">
+        <div class="card-panel-header"><i class="fa fa-chart-pie text-cyan me-2"></i>로그인 시도 구성 (성공/실패/무효)</div>
+        <svg id="auth-donut" width="100%" height="150"></svg>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-lg-4">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-user-ninja text-danger me-2"></i>TOP 출발지 IP</div>
+            <div id="auth-top-ips" style="max-height:420px; overflow-y:auto">
+              <div class="text-muted p-2">데이터 없음</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-8">
+          <div class="card-panel">
+            <div class="card-panel-header d-flex align-items-center">
+              <i class="fa fa-list text-cyan me-2"></i>인증 이벤트
+              <div class="form-check form-switch ms-auto small">
+                <input class="form-check-input" type="checkbox" id="auth-fail-only" onchange="renderAuthEvents()">
+                <label class="form-check-label small" for="auth-fail-only">실패만 보기</label>
+              </div>
+            </div>
+            <div class="table-responsive" style="max-height:460px; overflow-y:auto">
+              <table class="table table-dark table-sm mb-0" style="font-size:12px">
+                <thead><tr><th>시각</th><th>유형</th><th>계정</th><th>출발지 IP</th><th>포트</th></tr></thead>
+                <tbody id="auth-events-tbody">
+                  <tr><td colspan="5" class="text-muted text-center p-3">로딩 중...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ IP 평판 (AbuseIPDB) 패널 ════ -->
+    <div id="panel-reputation" class="panel-section d-none">
+      <div class="panel-title">
+        <i class="fa fa-user-shield me-2 text-cyan"></i>IP 평판 조회 — AbuseIPDB
+        <span class="badge ms-2" id="rep-mode-badge" style="background:#30363d">-</span>
+        <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="loadReputation()">
+          <i class="fa fa-sync me-1"></i>새로고침
+        </button>
+      </div>
+
+      <div class="card-panel mb-3" style="border-left:3px solid var(--cyan); background:rgba(56,189,248,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-cyan me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          공격 출발지 IP가 <strong>전 세계에서 실제로 신고된 악성 IP인지</strong>를 AbuseIPDB로 조회합니다.
+          신뢰 점수(0~100)가 높을수록 진짜 위협 → <strong>정탐 판정의 객관적 근거</strong>가 되고, 알림 신뢰도에 자동 반영됩니다.
+          점수 <strong id="rep-min-score">75</strong> 이상이면 악성으로 간주. 사설·Tailscale IP는 외부 API에 노출하지 않으려 조회하지 않습니다.
+          <code id="rep-mode-note"></code>
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md col-4"><div class="stat-card stat-sm border-cyan">
+          <div class="stat-value" id="rep-total">0</div><div class="stat-label">총 조회</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-danger">
+          <div class="stat-value text-danger" id="rep-malicious">0</div><div class="stat-label">악성 판정</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-purple">
+          <div class="stat-value text-purple" id="rep-api-calls">0</div><div class="stat-label">API 호출</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-success">
+          <div class="stat-value text-success" id="rep-cache-hits">0</div><div class="stat-label">캐시 적중</div></div></div>
+        <div class="col-md col-4"><div class="stat-card stat-sm border-orange">
+          <div class="stat-value text-orange" id="rep-cache-size">0</div><div class="stat-label">캐시 IP</div></div></div>
+      </div>
+
+      <div class="card-panel mb-3">
+        <div class="card-panel-header"><i class="fa fa-chart-simple text-orange me-2"></i>조회된 IP 신뢰점수 분포</div>
+        <svg id="rep-bars" width="100%" height="120"></svg>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-lg-4">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-magnifying-glass text-cyan me-2"></i>수동 조회</div>
+            <div class="p-2">
+              <div class="input-group input-group-sm mb-2">
+                <input type="text" class="form-control" id="rep-check-input" placeholder="예: 45.155.205.233"
+                       onkeydown="if(event.key==='Enter')checkReputation()">
+                <button class="btn btn-outline-cyan" onclick="checkReputation()">조회</button>
+              </div>
+              <div id="rep-check-result" class="small text-muted">IP를 입력하면 AbuseIPDB 신뢰 점수를 조회합니다.</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-8">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-list text-cyan me-2"></i>최근 조회한 외부 IP</div>
+            <div class="table-responsive" style="max-height:460px; overflow-y:auto">
+              <table class="table table-dark table-sm mb-0" style="font-size:12px">
+                <thead><tr><th>시각</th><th>IP</th><th>신뢰점수</th><th>신고수</th><th>국가</th><th>출처</th></tr></thead>
+                <tbody id="rep-events-tbody">
+                  <tr><td colspan="6" class="text-muted text-center p-3">로딩 중...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ SOAR 자동 대응 패널 ════ -->
+    <div id="panel-soar" class="panel-section d-none">
+      <div class="panel-title">
+        <i class="fa fa-robot me-2 text-cyan"></i>SOAR — AI 기반 자동 대응 (Playbooks)
+        <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="loadSoar()">
+          <i class="fa fa-sync me-1"></i>새로고침
+        </button>
+      </div>
+
+      <!-- 가이드 -->
+      <div class="card-panel mb-3" style="border-left:3px solid var(--cyan); background:rgba(56,189,248,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-cyan me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          탐지(SIEM/IDS) → <strong>AI 트리아지(Claude가 정탐/오탐 판정)</strong> → 자동 대응(차단/종결/에스컬레이션)의
+          SOC 워크플로를 자동화합니다. 오탐은 자동 종결되어 ML 모델에 피드백되고, 정탐 CRITICAL은 외부 IP를 자동 차단합니다.
+          차단 모드 <code id="soar-mode-label">simulate</code> — 시뮬레이션은 기록만 하며,
+          홈서버 실차단은 <code>.env</code>에 <code>SOAR_BLOCK_MODE=ufw</code> 설정 (sudo 필요).
+        </div>
+        <div class="small mt-2 pt-2" style="color:#e6edf3; border-top:1px solid var(--border)">
+          <i class="fa fa-shield-halved text-success me-1"></i><strong>안전장치</strong>:
+          사설·<span class="text-cyan">Tailscale(100.64.0.0/10)</span>·서버 자신은 <u>절대 차단 안 함</u>(자가 락아웃 방지).
+          <span id="soar-safety-extra"></span>
+          안전장치로 차단 차단된 횟수 <span class="badge bg-success" id="soar-prevented">0</span>
+        </div>
+      </div>
+
+      <!-- KPI -->
+      <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="stat-card border-cyan">
+          <div class="stat-icon text-cyan"><i class="fa fa-bolt"></i></div>
+          <div class="stat-value" id="soar-total-actions">0</div>
+          <div class="stat-label">자동 대응 수행</div>
+        </div></div>
+        <div class="col-md-3"><div class="stat-card border-danger">
+          <div class="stat-icon text-danger"><i class="fa fa-ban"></i></div>
+          <div class="stat-value text-danger" id="soar-blocked">0</div>
+          <div class="stat-label">차단된 IP</div>
+        </div></div>
+        <div class="col-md-3"><div class="stat-card border-success clickable"
+             onclick="showVerdictDetail('fp')" title="클릭하면 오탐 종결 상세 내역">
+          <div class="stat-icon text-success"><i class="fa fa-circle-check"></i></div>
+          <div class="stat-value text-success" id="soar-closed-fp">0</div>
+          <div class="stat-label">오탐 자동 종결</div>
+        </div></div>
+        <div class="col-md-3"><div class="stat-card border-warning clickable"
+             onclick="showVerdictDetail('tp')" title="클릭하면 정탐 에스컬레이션 상세 내역">
+          <div class="stat-icon text-warning"><i class="fa fa-arrow-up-right-dots"></i></div>
+          <div class="stat-value text-warning" id="soar-escalated">0</div>
+          <div class="stat-label">정탐 에스컬레이션</div>
+        </div></div>
+      </div>
+
+      <div class="row g-3">
+        <div class="col-lg-5">
+          <!-- 플레이북 -->
+          <div class="card-panel mb-3">
+            <div class="card-panel-header"><i class="fa fa-book text-cyan me-2"></i>플레이북</div>
+            <div id="soar-playbooks"><div class="text-muted p-2">로딩 중...</div></div>
+          </div>
+          <!-- 차단 IP -->
+          <div class="card-panel">
+            <div class="card-panel-header d-flex align-items-center">
+              <i class="fa fa-ban text-danger me-2"></i>차단 IP 목록
+              <div class="ms-auto d-flex gap-1">
+                <input type="text" id="soar-block-ip-input" class="form-control form-control-sm font-monospace"
+                       placeholder="IP 수동 차단" style="width:150px; font-size:11px">
+                <button class="btn btn-xs btn-outline-danger" onclick="soarManualBlock()">차단</button>
+              </div>
+            </div>
+            <div id="soar-blocklist" style="max-height:300px; overflow-y:auto">
+              <div class="text-muted p-2">차단된 IP 없음</div>
+            </div>
+          </div>
+        </div>
+        <!-- 대응 타임라인 -->
+        <div class="col-lg-7">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-timeline text-warning me-2"></i>자동 대응 타임라인</div>
+            <div class="table-responsive" style="max-height:640px; overflow-y:auto">
+              <table class="table table-dark table-sm mb-0" style="font-size:12px">
+                <thead><tr><th>시각</th><th>플레이북</th><th>액션</th><th>대상</th><th>결과</th><th>상세</th></tr></thead>
+                <tbody id="soar-actions-tbody">
+                  <tr><td colspan="6" class="text-muted text-center p-3">아직 대응 이력 없음</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ════ 인시던트 (케이스 관리) 패널 ════ -->
+    <div id="panel-incidents" class="panel-section d-none">
+      <div class="panel-title">
+        <i class="fa fa-folder-open me-2 text-danger"></i>인시던트 케이스 관리
+        <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="loadIncidents()">
+          <i class="fa fa-sync me-1"></i>새로고침
+        </button>
+      </div>
+
+      <!-- 가이드 -->
+      <div class="card-panel mb-3" style="border-left:3px solid var(--red); background:rgba(248,81,73,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-red me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          알림은 이벤트, <strong>인시던트는 대응 단위</strong>입니다. SOAR가 정탐 판정한 알림은
+          (위협유형 × 출발지 대역) 케이스로 자동 승격·병합되고 차단 조치가 타임라인에 기록됩니다.
+          실무 흐름대로 <code>OPEN → INVESTIGATING → CONTAINED → RESOLVED</code> 로 관리하세요.
+        </div>
+      </div>
+
+      <!-- KPI -->
+      <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="stat-card border-danger">
+          <div class="stat-icon text-danger"><i class="fa fa-folder-open"></i></div>
+          <div class="stat-value text-danger" id="inc-active">0</div>
+          <div class="stat-label">활성 인시던트</div>
+        </div></div>
+        <div class="col-md-3"><div class="stat-card border-warning">
+          <div class="stat-icon text-warning"><i class="fa fa-magnifying-glass"></i></div>
+          <div class="stat-value text-warning" id="inc-investigating">0</div>
+          <div class="stat-label">조사 중</div>
+        </div></div>
+        <div class="col-md-3"><div class="stat-card border-cyan">
+          <div class="stat-icon text-cyan"><i class="fa fa-shield-halved"></i></div>
+          <div class="stat-value" id="inc-contained">0</div>
+          <div class="stat-label">봉쇄됨</div>
+        </div></div>
+        <div class="col-md-3"><div class="stat-card border-success">
+          <div class="stat-icon text-success"><i class="fa fa-circle-check"></i></div>
+          <div class="stat-value text-success" id="inc-resolved">0</div>
+          <div class="stat-label">해결됨</div>
+        </div></div>
+      </div>
+
+      <div class="row g-3">
+        <!-- 인시던트 목록 -->
+        <div class="col-lg-7">
+          <div class="card-panel">
+            <div class="card-panel-header"><i class="fa fa-list text-danger me-2"></i>케이스 목록 (행 클릭 → 타임라인)</div>
+            <div class="table-responsive" style="max-height:560px; overflow-y:auto">
+              <table class="table table-dark table-sm table-hover mb-0" style="font-size:12px">
+                <thead><tr><th>#</th><th>제목</th><th>심각도</th><th>상태</th><th>알림</th><th>담당</th><th>최근 활동</th></tr></thead>
+                <tbody id="inc-tbody">
+                  <tr><td colspan="7" class="text-muted text-center p-3">인시던트 없음</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <!-- 상세/타임라인 -->
+        <div class="col-lg-5">
+          <div class="card-panel">
+            <div class="card-panel-header d-flex align-items-center">
+              <i class="fa fa-timeline text-warning me-2"></i><span id="inc-detail-title">케이스를 선택하세요</span>
+            </div>
+            <div id="inc-detail-controls" class="d-none p-2 border-bottom border-secondary d-flex gap-1 flex-wrap">
+              <select id="inc-status-select" class="form-select form-select-sm" style="width:auto; font-size:11px">
+                <option value="OPEN">OPEN</option>
+                <option value="INVESTIGATING">INVESTIGATING</option>
+                <option value="CONTAINED">CONTAINED</option>
+                <option value="RESOLVED">RESOLVED</option>
+              </select>
+              <input type="text" id="inc-assignee-input" class="form-control form-control-sm"
+                     placeholder="담당자" style="width:100px; font-size:11px">
+              <input type="text" id="inc-note-input" class="form-control form-control-sm flex-fill"
+                     placeholder="메모 추가" style="font-size:11px">
+              <button class="btn btn-xs btn-outline-cyan" onclick="saveIncident()">저장</button>
+            </div>
+            <div id="inc-timeline" style="max-height:460px; overflow-y:auto">
+              <div class="text-muted p-3 small">왼쪽 목록에서 인시던트를 클릭하면 타임라인이 표시됩니다.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div><!-- /layout -->
+
+<!-- ── 스크립트 ── -->
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<!-- Three.js + Globe.gl (3D 지구본) -->
+<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+<script src="https://unpkg.com/globe.gl@2.32.0/dist/globe.gl.min.js"></script>
+<script src="/static/js/dashboard.js"></script>
+</body>
+</html>

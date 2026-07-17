@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>로그인 · SOC 보안관제</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet"/>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh;
+      display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(ellipse at top, #0b1e3a 0%, #0d1117 55%, #020409 100%);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Malgun Gothic", sans-serif;
+      color: #e6edf3; padding: 20px;
+    }
+    .login-card {
+      width: 100%; max-width: 360px;
+      background: rgba(28,35,51,.85);
+      border: 1px solid #30363d;
+      border-radius: 14px;
+      padding: 32px 26px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.5);
+      backdrop-filter: blur(6px);
+    }
+    .brand { text-align: center; margin-bottom: 22px; }
+    .brand i { font-size: 34px; color: #39d0d8; }
+    .brand h1 { font-size: 17px; margin: 12px 0 2px; font-weight: 700; }
+    .brand p { font-size: 12px; color: #8b949e; margin: 0; }
+    label { display: block; font-size: 12px; color: #8b949e; margin: 14px 0 5px; }
+    input {
+      width: 100%; padding: 11px 12px;
+      background: #0d1117; border: 1px solid #30363d; border-radius: 8px;
+      color: #e6edf3; font-size: 14px; outline: none;
+    }
+    input:focus { border-color: #39d0d8; box-shadow: 0 0 0 2px rgba(57,208,216,.15); }
+    button {
+      width: 100%; margin-top: 22px; padding: 12px;
+      background: #39d0d8; color: #001417; border: none; border-radius: 8px;
+      font-size: 14px; font-weight: 700; cursor: pointer; transition: background .15s;
+    }
+    button:hover { background: #2bb8bf; }
+    .error {
+      margin-top: 16px; padding: 10px 12px;
+      background: rgba(248,81,73,.12); border: 1px solid rgba(248,81,73,.4);
+      border-radius: 8px; color: #f85149; font-size: 12.5px; text-align: center;
+    }
+    .foot { margin-top: 18px; text-align: center; font-size: 11px; color: #6e7681; }
+    .live-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:#3fb950; margin-right:5px; animation: blink 1.6s infinite; }
+    @keyframes blink { 50% { opacity:.3; } }
+  </style>
+</head>
+<body>
+  <form class="login-card" method="POST" action="/login">
+    <div class="brand">
+      <i class="fa-solid fa-shield-halved"></i>
+      <h1>SOC 보안관제 대시보드</h1>
+      <p><span class="live-dot"></span>AI 기반 실시간 관제 · 인증 필요</p>
+    </div>
+
+    <label for="username">사용자명</label>
+    <input type="text" id="username" name="username" autocomplete="username" autofocus required/>
+
+    <label for="password">비밀번호</label>
+    <input type="password" id="password" name="password" autocomplete="current-password" required/>
+
+    <button type="submit"><i class="fa fa-right-to-bracket me-2"></i>로그인</button>
+
+    {% if error %}<div class="error"><i class="fa fa-triangle-exclamation me-1"></i>{{ error }}</div>{% endif %}
+
+    <div class="foot">인가된 사용자만 접근할 수 있습니다.</div>
+  </form>
+</body>
+</html>

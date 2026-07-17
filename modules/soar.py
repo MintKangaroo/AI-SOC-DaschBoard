@@ -1,0 +1,560 @@
+"""
+SOAR (Security Orchestration, Automation and Response) 엔진
+
+홈서버 관제 목적의 자동 대응 플레이북:
+  PB-AI-TRIAGE   : HIGH/CRITICAL 알림 → Claude AI 트리아지 → 오탐 자동 종결 / 정탐 에스컬레이션
+  PB-AUTO-BLOCK  : AI 정탐 판정 + CRITICAL + 외부 IP → 자동 차단
+  PB-SIEM-SCANNER: 접근 로그에서 동일 IP 프로브 반복(3회+) → 자동 차단
+  PB-IOC-BLOCK   : 위협 인텔 IoC 매칭 IP → 즉시 차단
+  PB-BRUTE-BLOCK : 무차별 대입(BRUTE_FORCE) 외부 IP → 자동 차단
+
+차단 모드 (SOAR_BLOCK_MODE):
+  simulate (기본) — 차단 명령을 실행하지 않고 기록만 (학습/데모 안전)
+  ufw / iptables  — 실제 방화벽 명령 실행 (sudo -n 필요, 실패 시 시뮬레이션 기록)
+
+모든 대응은 data/blocklist.txt 에 영속화되고 SocketIO "soar_action" 으로 스트리밍된다.
+"""
+import os
+import time
+import socket
+import threading
+import subprocess
+from datetime import datetime
+from collections import deque, Counter
+
+
+class SOAREngine:
+    AI_TRIAGE_BUDGET = 6          # 5분당 AI 트리아지 최대 횟수 (비용 보호)
+    AI_TRIAGE_WINDOW = 300.0
+
+    def __init__(self, socketio, config=None, ai_analyst=None, ml_analyst=None,
+                 threat_detector=None, blocklist_path="data/blocklist.txt"):
+        self.socketio = socketio
+        self.config = config or {}
+        self.ai = ai_analyst
+        self.ml = ml_analyst
+        self.threat_detector = threat_detector
+        self.decision = None    # app.py 에서 주입 (판정 결과를 클러스터에 학습)
+        self.incidents = None   # app.py 에서 주입 (정탐 → 인시던트 승격)
+        self.notifier = None    # app.py 에서 주입 (정탐/차단 → 폰 푸시)
+        self.running = False
+        self._lock = threading.Lock()
+        self._queue = deque(maxlen=500)
+
+        self.block_mode = str(self.config.get("SOAR_BLOCK_MODE", "simulate")).lower()
+        self.auto_block = str(self.config.get("SOAR_AUTO_BLOCK", "True")) == "True"
+        try:
+            # 차단 자동 만료 TTL (시간) — 0 이면 영구 차단
+            self.block_ttl_hours = float(self.config.get("SOAR_BLOCK_TTL_HOURS", 24))
+        except (TypeError, ValueError):
+            self.block_ttl_hours = 24.0
+        self._last_expiry_check = 0.0
+
+        # ── 안전장치: 절대 차단 금지 목록 (자가 락아웃 방지) ──
+        # 사설/CGNAT(Tailscale)/자기자신은 코드 고정, 추가 IP·대역은 .env로 지정
+        allow_raw = self.config.get("SOAR_BLOCK_ALLOWLIST", "") or ""
+        self._allowlist = tuple(x.strip() for x in allow_raw.split(",") if x.strip())
+        self._own_ips = self._detect_own_ips()
+
+        self.blocklist_path = blocklist_path
+        self.blocked_ips = {}          # ip → {reason, timestamp, mode}
+        self._load_blocklist()
+
+        self.actions = deque(maxlen=300)   # 대응 이력
+        self._action_id = 0
+        self._triaged_alerts = set()       # 알림별 AI 트리아지 1회 제한
+        self._ai_calls = deque(maxlen=50)  # AI 호출 타임스탬프 (rate limit)
+        self._siem_probe_counter = Counter()
+
+        self.stats = {
+            "total_actions": 0,
+            "auto_blocked": 0,
+            "auto_closed_fp": 0,
+            "escalated_tp": 0,
+            "ai_triages": 0,
+            "blocks_prevented": 0,   # 안전장치로 차단 차단된 수
+        }
+
+        self.playbooks = [
+            {"id": "PB-AI-TRIAGE",    "name": "AI 트리아지 (정탐/오탐 자동 판별)",
+             "description": "HIGH/CRITICAL 알림을 Claude AI가 분석 — 오탐은 자동 종결+ML 피드백, 정탐은 에스컬레이션",
+             "enabled": True, "runs": 0, "last_run": None},
+            {"id": "PB-AUTO-BLOCK",   "name": "정탐 CRITICAL 자동 차단",
+             "description": "AI 정탐 판정(신뢰도 80+) + CRITICAL + 외부 IP → 방화벽 차단",
+             "enabled": True, "runs": 0, "last_run": None},
+            {"id": "PB-SIEM-SCANNER", "name": "반복 스캐너 자동 차단",
+             "description": "자동매매 서버 접근 로그에서 동일 IP가 프로브 3회 이상 → 차단",
+             "enabled": True, "runs": 0, "last_run": None},
+            {"id": "PB-IOC-BLOCK",    "name": "IoC 매칭 즉시 차단",
+             "description": "위협 인텔 피드의 악성 IP와 통신 감지 → 즉시 차단",
+             "enabled": True, "runs": 0, "last_run": None},
+            {"id": "PB-BRUTE-BLOCK",  "name": "무차별 대입 자동 차단",
+             "description": "BRUTE_FORCE 알림의 외부 출발지 IP → 차단",
+             "enabled": True, "runs": 0, "last_run": None},
+        ]
+
+    # ------------------------------------------------------------------ #
+    #  라이프사이클
+    # ------------------------------------------------------------------ #
+
+    def start(self, demo=True):
+        if self.running:
+            return
+        self.running = True
+        threading.Thread(target=self._worker_loop, daemon=True).start()
+        print(f"[SOAR] 엔진 시작 — 차단 모드: {self.block_mode}, 자동 차단: {self.auto_block}")
+        # 실차단 모드인데 sudo 가 안 되면 명확히 경고 (조용한 폴백 방지)
+        if self.block_mode in ("ufw", "iptables"):
+            if self._run_fw(["sudo", "-n", "true"]):
+                print(f"[SOAR] 실차단 활성 — {self.block_mode} 방화벽 규칙을 실제 적용합니다.")
+            else:
+                print(f"[SOAR] ⚠ 경고: {self.block_mode} 모드이나 passwordless sudo 불가 "
+                      f"→ 실제 차단은 실패하고 simulate 로 기록됩니다. "
+                      f"sudoers 설정 필요.")
+        print(f"[SOAR] 안전장치: 사설·Tailscale(100.64/10)·서버자신"
+              + (f"·화이트리스트{list(self._allowlist)}" if self._allowlist else "")
+              + " 절대 차단 안 함")
+
+    def stop(self):
+        self.running = False
+
+    # ------------------------------------------------------------------ #
+    #  이벤트 핸들러 (다른 모듈에서 호출)
+    # ------------------------------------------------------------------ #
+
+    def handle_alert(self, alert):
+        """threat_detector 알림 (신뢰도 임계값 통과분만 들어옴)"""
+        self._queue.append(("alert", alert))
+
+    def handle_siem_event(self, event):
+        """SIEM 의심 이벤트 (HIGH/CRITICAL)"""
+        self._queue.append(("siem", event))
+
+    def handle_ti_match(self, match):
+        """위협 인텔 IoC 매칭"""
+        self._queue.append(("ti", match))
+
+    # ------------------------------------------------------------------ #
+    #  조회 API
+    # ------------------------------------------------------------------ #
+
+    def get_status(self):
+        with self._lock:
+            return {
+                "stats": dict(self.stats),
+                "block_mode": self.block_mode,
+                "auto_block": self.auto_block,
+                "block_ttl_hours": self.block_ttl_hours,
+                "safety": {
+                    "cgnat_protected": "100.64.0.0/10 (Tailscale)",
+                    "private_protected": True,
+                    "own_ips": sorted(self._own_ips),
+                    "allowlist": list(self._allowlist),
+                    "prevented": self.stats["blocks_prevented"],
+                },
+                "playbooks": [dict(p) for p in self.playbooks],
+                "blocked_ips": [
+                    {"ip": ip, **info} for ip, info in
+                    sorted(self.blocked_ips.items(),
+                           key=lambda kv: kv[1]["timestamp"], reverse=True)
+                ],
+                "actions": list(reversed(list(self.actions)))[:50],
+            }
+
+    def toggle_playbook(self, pb_id):
+        with self._lock:
+            for pb in self.playbooks:
+                if pb["id"] == pb_id:
+                    pb["enabled"] = not pb["enabled"]
+                    return pb["enabled"]
+        return None
+
+    # ------------------------------------------------------------------ #
+    #  수동 대응 (분석가 조치)
+    # ------------------------------------------------------------------ #
+
+    def manual_block(self, ip, reason="분석가 수동 차단"):
+        return self._block_ip(ip, reason, playbook="MANUAL")
+
+    def manual_unblock(self, ip):
+        with self._lock:
+            if ip not in self.blocked_ips:
+                return False
+            mode = self.blocked_ips[ip].get("mode", "simulate")
+            del self.blocked_ips[ip]
+            self._save_blocklist()
+        if mode == "ufw":
+            self._run_fw(["sudo", "-n", "ufw", "delete", "deny", "from", ip])
+        elif mode == "iptables":
+            self._run_fw(["sudo", "-n", "iptables", "-D", "INPUT", "-s", ip, "-j", "DROP"])
+        self._log_action("MANUAL", "unblock", ip, "success", "차단 해제")
+        return True
+
+    # ------------------------------------------------------------------ #
+    #  워커 루프
+    # ------------------------------------------------------------------ #
+
+    def _worker_loop(self):
+        while self.running:
+            now = time.time()
+            if now - self._last_expiry_check > 30:
+                self._last_expiry_check = now
+                try:
+                    self._expire_blocks()
+                except Exception as e:
+                    print(f"[SOAR] TTL 만료 처리 오류: {e}")
+            if self._queue:
+                kind, data = self._queue.popleft()
+                try:
+                    if kind == "alert":
+                        self._process_alert(data)
+                    elif kind == "siem":
+                        self._process_siem(data)
+                    elif kind == "ti":
+                        self._process_ti(data)
+                except Exception as e:
+                    print(f"[SOAR] 처리 오류({kind}): {e}")
+            else:
+                time.sleep(0.3)
+
+    # ------------------------------------------------------------------ #
+    #  플레이북 실행
+    # ------------------------------------------------------------------ #
+
+    def _process_alert(self, alert):
+        alert_id = alert.get("id")
+        severity = alert.get("severity")
+        src_ip = alert.get("src_ip")
+
+        # PB-BRUTE-BLOCK: AI 없이도 즉시 차단 (명백한 케이스)
+        if (self._pb_enabled("PB-BRUTE-BLOCK") and self.auto_block
+                and alert.get("threat_type") == "BRUTE_FORCE"
+                and self._is_external(src_ip)):
+            self._pb_run("PB-BRUTE-BLOCK")
+            self._block_ip(src_ip, f"무차별 대입 (알림 #{alert_id})",
+                           playbook="PB-BRUTE-BLOCK")
+
+        # PB-AI-TRIAGE
+        if (not self._pb_enabled("PB-AI-TRIAGE") or severity not in ("HIGH", "CRITICAL")
+                or alert_id in self._triaged_alerts or not self.ai):
+            return
+        self._triaged_alerts.add(alert_id)
+
+        if not self._ai_budget_ok():
+            # 예산 초과 → 규칙 기반 fallback (탐지기 신뢰도 사용)
+            conf = alert.get("confidence") or 0.5
+            verdict = conf >= 0.7
+            detail = f"AI 예산 초과 — 규칙 기반 판정(신뢰도 {conf:.2f})"
+            self._apply_triage(alert, verdict, int(conf * 100), detail, ai=False)
+            return
+
+        self._pb_run("PB-AI-TRIAGE")
+        self._ai_calls.append(time.time())
+        entry = self.ai.analyze_alert(alert, async_mode=False)
+        result = (entry or {}).get("result", {})
+        verdict = result.get("is_true_positive")
+        confidence = result.get("confidence", 50)
+        summary = result.get("summary", "")
+        with self._lock:
+            self.stats["ai_triages"] += 1
+        if verdict is None:
+            self._log_action("PB-AI-TRIAGE", "triage", f"알림 #{alert_id}",
+                             "inconclusive", "AI 판정 불가 — 수동 검토 필요")
+            return
+        self._apply_triage(alert, verdict, confidence, summary, ai=True)
+
+    def _apply_triage(self, alert, is_tp, confidence, summary, ai=True):
+        alert_id = alert.get("id")
+        src_ip = alert.get("src_ip")
+        who = "AI" if ai else "규칙"
+
+        # 의사결정 지원: 판정 결과를 위협 그룹에 학습 (정오탐 분석 자동화)
+        if self.decision:
+            try:
+                self.decision.record_verdict(alert_id, is_tp, source=who)
+            except Exception:
+                pass
+
+        if not is_tp:
+            # 오탐 → 자동 종결 (+ AI 경로는 ML 피드백이 ai_analyst 에서 자동 반영)
+            if self.threat_detector:
+                self.threat_detector.update_alert_status(
+                    alert_id, "CLOSED",
+                    note=f"SOAR {who} 트리아지: 오탐 판정({confidence}%) — {summary}",
+                    assignee="SOAR")
+            if not ai and self.ml:
+                self.ml.mark_alert(is_fp=True)
+            with self._lock:
+                self.stats["auto_closed_fp"] += 1
+            self._log_action("PB-AI-TRIAGE", "auto_close", f"알림 #{alert_id}",
+                             "success", f"{who} 오탐 판정({confidence}%) → 자동 종결")
+            return
+
+        # 정탐 → 에스컬레이션 (ACK + 메모)
+        if self.threat_detector:
+            self.threat_detector.update_alert_status(
+                alert_id, "ACK",
+                note=f"SOAR {who} 트리아지: 정탐 판정({confidence}%) — {summary}",
+                assignee="SOAR")
+        if not ai and self.ml:
+            self.ml.mark_alert(is_fp=False)
+        with self._lock:
+            self.stats["escalated_tp"] += 1
+        self._log_action("PB-AI-TRIAGE", "escalate", f"알림 #{alert_id}",
+                         "success", f"{who} 정탐 판정({confidence}%) → 에스컬레이션")
+
+        # 정탐 확정 → 폰 푸시 (오탐은 보내지 않음)
+        if self.notifier:
+            try:
+                self.notifier.notify_true_positive(alert, confidence, who=who)
+            except Exception:
+                pass
+
+        # 인시던트 자동 승격 (같은 위협그룹은 기존 케이스에 병합)
+        if self.incidents:
+            try:
+                inc_id = self.incidents.promote_alert(
+                    alert, f"{who} 정탐 판정({confidence}%)")
+                self._log_action("PB-AI-TRIAGE", "incident", f"INC-{inc_id}",
+                                 "success", f"알림 #{alert_id} → 인시던트 #{inc_id} 승격/병합")
+            except Exception:
+                pass
+
+        # PB-AUTO-BLOCK: 정탐 + CRITICAL + 외부 IP + 고신뢰
+        if (self._pb_enabled("PB-AUTO-BLOCK") and self.auto_block
+                and alert.get("severity") == "CRITICAL"
+                and confidence >= 80 and self._is_external(src_ip)):
+            self._pb_run("PB-AUTO-BLOCK")
+            self._block_ip(src_ip,
+                           f"{who} 정탐 CRITICAL (알림 #{alert_id}, {confidence}%)",
+                           playbook="PB-AUTO-BLOCK")
+
+    def _process_siem(self, event):
+        if not (self._pb_enabled("PB-SIEM-SCANNER") and self.auto_block):
+            return
+        if event.get("severity") not in ("HIGH", "CRITICAL"):
+            return
+        ip = event.get("ip")
+        if not self._is_external(ip):
+            return
+        self._siem_probe_counter[ip] += 1
+        if self._siem_probe_counter[ip] == 3:   # 3회째에 1번만 발동
+            self._pb_run("PB-SIEM-SCANNER")
+            self._block_ip(ip, f"반복 프로브 3회+ ({event.get('category')}, "
+                               f"소스: {event.get('source')})",
+                           playbook="PB-SIEM-SCANNER")
+
+    def _process_ti(self, match):
+        if not (self._pb_enabled("PB-IOC-BLOCK") and self.auto_block):
+            return
+        if match.get("kind") != "ip":
+            return
+        ip = match.get("indicator")
+        self._pb_run("PB-IOC-BLOCK")
+        self._block_ip(ip, f"위협 인텔 IoC 매칭 ({match.get('description', '')[:60]})",
+                       playbook="PB-IOC-BLOCK")
+
+    # ------------------------------------------------------------------ #
+    #  차단 실행
+    # ------------------------------------------------------------------ #
+
+    def _block_ip(self, ip, reason, playbook, ttl_hours=None):
+        if not ip:
+            return False
+
+        # 안전장치: 사설/Tailscale/자기자신/화이트리스트는 절대 차단 금지
+        blockable, why = self._is_blockable(ip)
+        if not blockable:
+            with self._lock:
+                self.stats["blocks_prevented"] += 1
+            self._log_action(playbook, "block_prevented", ip, "safe",
+                             f"안전장치 발동 — {why} (차단 안 함) · 원래 사유: {reason}")
+            return False
+
+        with self._lock:
+            if ip in self.blocked_ips:
+                return False   # 이미 차단됨
+
+        mode, result = self.block_mode, "simulated"
+        if self.block_mode == "ufw":
+            ok = self._run_fw(["sudo", "-n", "ufw", "insert", "1", "deny", "from", ip])
+            result = "success" if ok else "simulated (ufw 실패)"
+            mode = "ufw" if ok else "simulate"
+        elif self.block_mode == "iptables":
+            ok = self._run_fw(["sudo", "-n", "iptables", "-I", "INPUT", "-s", ip, "-j", "DROP"])
+            result = "success" if ok else "simulated (iptables 실패)"
+            mode = "iptables" if ok else "simulate"
+
+        ttl = self.block_ttl_hours if ttl_hours is None else ttl_hours
+        expires_ts = time.time() + ttl * 3600 if ttl > 0 else 0
+        with self._lock:
+            self.blocked_ips[ip] = {
+                "reason": reason, "mode": mode,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                "expires_ts": expires_ts,
+                "expires": (datetime.fromtimestamp(expires_ts)
+                            .strftime("%Y-%m-%d %H:%M:%S") if expires_ts else "영구"),
+            }
+            self.stats["auto_blocked"] += 1
+            self._save_blocklist()
+        self._log_action(playbook, "block_ip", ip, result,
+                         f"{reason} (만료: {self.blocked_ips[ip]['expires']})")
+        if self.notifier:
+            try:
+                self.notifier.notify_block(ip, reason)
+            except Exception:
+                pass
+        if self.incidents:
+            try:
+                self.incidents.attach_block(ip, reason)
+            except Exception:
+                pass
+        return True
+
+    def _expire_blocks(self):
+        """TTL 이 지난 차단을 자동 해제"""
+        now = time.time()
+        with self._lock:
+            expired = [(ip, info) for ip, info in self.blocked_ips.items()
+                       if info.get("expires_ts") and info["expires_ts"] <= now]
+            for ip, _ in expired:
+                del self.blocked_ips[ip]
+            if expired:
+                self._save_blocklist()
+        for ip, info in expired:
+            mode = info.get("mode", "simulate")
+            if mode == "ufw":
+                self._run_fw(["sudo", "-n", "ufw", "delete", "deny", "from", ip])
+            elif mode == "iptables":
+                self._run_fw(["sudo", "-n", "iptables", "-D", "INPUT", "-s", ip, "-j", "DROP"])
+            self._log_action("TTL", "unblock", ip, "success",
+                             f"차단 TTL({self.block_ttl_hours}h) 만료 — 자동 해제")
+
+    @staticmethod
+    def _run_fw(cmd):
+        try:
+            r = subprocess.run(cmd, capture_output=True, timeout=5)
+            return r.returncode == 0
+        except Exception:
+            return False
+
+    # ------------------------------------------------------------------ #
+    #  유틸
+    # ------------------------------------------------------------------ #
+
+    def _pb_enabled(self, pb_id):
+        with self._lock:
+            return any(p["id"] == pb_id and p["enabled"] for p in self.playbooks)
+
+    def _pb_run(self, pb_id):
+        with self._lock:
+            for p in self.playbooks:
+                if p["id"] == pb_id:
+                    p["runs"] += 1
+                    p["last_run"] = datetime.now().strftime("%H:%M:%S")
+
+    def _ai_budget_ok(self):
+        now = time.time()
+        recent = [t for t in self._ai_calls if now - t < self.AI_TRIAGE_WINDOW]
+        return len(recent) < self.AI_TRIAGE_BUDGET
+
+    def _log_action(self, playbook, action, target, result, detail):
+        with self._lock:
+            self._action_id += 1
+            entry = {
+                "id": self._action_id,
+                "playbook": playbook,
+                "action": action,
+                "target": target,
+                "result": result,
+                "detail": detail,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            }
+            self.actions.append(entry)
+            self.stats["total_actions"] += 1
+        self.socketio.emit("soar_action", entry)
+
+    _PRIVATE_PREFIXES = ("10.", "127.", "192.168.", "169.254.",
+                         "172.16.", "172.17.", "172.18.", "172.19.", "172.20.",
+                         "172.21.", "172.22.", "172.23.", "172.24.", "172.25.",
+                         "172.26.", "172.27.", "172.28.", "172.29.", "172.30.", "172.31.")
+
+    @classmethod
+    def _is_external(cls, ip):
+        return bool(ip) and not ip.startswith(cls._PRIVATE_PREFIXES)
+
+    @staticmethod
+    def _is_cgnat(ip):
+        """100.64.0.0/10 (CGNAT) — Tailscale 대역. 절대 차단 금지."""
+        try:
+            a, b = ip.split(".")[:2]
+            return int(a) == 100 and 64 <= int(b) <= 127
+        except (ValueError, IndexError):
+            return False
+
+    @staticmethod
+    def _detect_own_ips():
+        ips = set()
+        try:
+            for info in socket.getaddrinfo(socket.gethostname(), None):
+                addr = info[4][0]
+                if "." in addr:
+                    ips.add(addr)
+        except Exception:
+            pass
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ips.add(s.getsockname()[0])
+            s.close()
+        except Exception:
+            pass
+        return ips
+
+    def _is_blockable(self, ip):
+        """차단 가능 여부 검사 (자가 락아웃 방지). 반환: (bool, 사유 or None)"""
+        if not ip:
+            return False, "빈 IP"
+        if ip.startswith(self._PRIVATE_PREFIXES):
+            return False, "사설 IP"
+        if self._is_cgnat(ip):
+            return False, "Tailscale/CGNAT 대역"
+        if ip in self._own_ips:
+            return False, "서버 자신"
+        for entry in self._allowlist:
+            if ip == entry or (entry.endswith(".") and ip.startswith(entry)):
+                return False, f"화이트리스트({entry})"
+        return True, None
+
+    # ------------------------------------------------------------------ #
+    #  차단 목록 영속화
+    # ------------------------------------------------------------------ #
+
+    def _load_blocklist(self):
+        try:
+            if os.path.exists(self.blocklist_path):
+                with open(self.blocklist_path, "r", encoding="utf-8") as f:
+                    for line in f:
+                        parts = line.strip().split("|", 4)
+                        if len(parts) >= 4:
+                            ip, mode, ts, reason = parts[0], parts[1], parts[2], parts[3]
+                            expires_ts = float(parts[4]) if len(parts) == 5 else 0
+                            self.blocked_ips[ip] = {
+                                "reason": reason, "mode": mode, "timestamp": ts,
+                                "expires_ts": expires_ts,
+                                "expires": (datetime.fromtimestamp(expires_ts)
+                                            .strftime("%Y-%m-%d %H:%M:%S")
+                                            if expires_ts else "영구"),
+                            }
+        except Exception as e:
+            print(f"[SOAR] 차단 목록 로드 실패: {e}")
+
+    def _save_blocklist(self):
+        try:
+            os.makedirs(os.path.dirname(self.blocklist_path) or ".", exist_ok=True)
+            with open(self.blocklist_path, "w", encoding="utf-8") as f:
+                for ip, info in self.blocked_ips.items():
+                    f.write(f"{ip}|{info['mode']}|{info['timestamp']}|"
+                            f"{info['reason']}|{info.get('expires_ts', 0)}\n")
+        except Exception as e:
+            print(f"[SOAR] 차단 목록 저장 실패: {e}")

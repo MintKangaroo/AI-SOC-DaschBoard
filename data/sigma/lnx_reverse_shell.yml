@@ -1,0 +1,18 @@
+title: Linux Reverse Shell via /dev/tcp
+id: 7c2e2b6a-1f3a-4c11-9d21-aa11bb22cc01
+status: stable
+description: bash/sh 가 /dev/tcp 로 리버스 셸을 여는 패턴
+level: critical
+logsource:
+  product: linux
+  category: process_creation
+tags:
+  - attack.execution
+  - attack.t1059.004
+detection:
+  selection:
+    CommandLine|contains:
+      - '/dev/tcp/'
+      - 'bash -i'
+      - 'sh -i'
+  condition: selection
