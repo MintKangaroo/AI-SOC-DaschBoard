@@ -393,3 +393,78 @@ def test_render_playbook_targets_group():
     content = pm._render_playbook(["openssh-server"], security_only=True)
     assert "hosts: targets" in content
     assert "openssh-server" in content
+
+
+# ─────────────────── 모듈 헬스 집계 ───────────────────
+
+from modules import system_health
+
+
+class _FakeApp:
+    """system_health.collect() 검증용 최소 app (config + 서비스 속성)."""
+    def __init__(self, services, demo=True):
+        self.config = {"DEMO_MODE": demo}
+        for k, v in services.items():
+            setattr(self, k, v)
+
+
+class _Svc:
+    def __init__(self, running=True, stats=None, status=None):
+        self.running = running
+        self._stats = stats
+        self._status = status
+    def get_stats(self):
+        if self._stats is None:
+            raise RuntimeError("no stats")
+        return self._stats
+    def get_status(self):
+        if self._status is None:
+            raise RuntimeError("no status")
+        return self._status
+
+
+def test_health_reads_explicit_mode_and_detail():
+    app = _FakeApp({
+        "edr": _Svc(stats={"mode": "demo", "detections": 5}),
+        "net_monitor": _Svc(stats={"mode": "real", "malicious_conns": 2}),
+    })
+    out = system_health.collect(app)
+    mods = {m["key"]: m for m in out["modules"]}
+    assert mods["edr"]["mode"] == "demo" and mods["edr"]["detail"] == "탐지 5"
+    assert mods["net_monitor"]["mode"] == "real" and mods["net_monitor"]["detail"] == "악성 연결 2"
+
+
+def test_health_nested_status_stats_authlog():
+    # authlog 는 get_stats 없이 get_status()["stats"]["mode"] 로 노출
+    app = _FakeApp({"authlog": _Svc(status={"stats": {"mode": "real", "failed": 7}})})
+    m = {x["key"]: x for x in system_health.collect(app)["modules"]}["authlog"]
+    assert m["mode"] == "real"
+    assert m["detail"] == "실패 시도 7"
+
+
+def test_health_siem_real_when_source_exists():
+    app = _FakeApp({
+        "siem_collector": _Svc(status={"sources": [{"exists": True}], "stats": {"total_events": 3}}),
+    })
+    m = {x["key"]: x for x in system_health.collect(app)["modules"]}["siem_collector"]
+    assert m["mode"] == "real"
+
+
+def test_health_down_and_off_and_live():
+    app = _FakeApp({
+        "packet_analyzer": _Svc(running=False),                       # down
+        "notifier": _Svc(status={"active": False}),                   # off
+        "mitre_tracker": _Svc(stats={}),                              # live(모드개념 없음)
+    })
+    m = {x["key"]: x for x in system_health.collect(app)["modules"]}
+    assert m["packet_analyzer"]["mode"] == "down" and not m["packet_analyzer"]["running"]
+    assert m["notifier"]["mode"] == "off"
+    assert m["mitre_tracker"]["mode"] == "live"
+
+
+def test_health_missing_service_marked_down():
+    app = _FakeApp({})  # 아무 서비스도 등록 안 함
+    out = system_health.collect(app)
+    assert out["summary"]["total"] == len(system_health.SPECS)
+    assert all(m["mode"] == "down" for m in out["modules"])
+    assert out["summary"]["down"] == len(system_health.SPECS)

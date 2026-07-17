@@ -341,6 +341,13 @@ def system_info():
     return jsonify(_si.get_all())
 
 
+@api_bp.route("/system/health", methods=["GET"])
+def system_health():
+    """전 모듈 가동 상태·동작 모드(실측/데모/비활성) 집계."""
+    from modules import system_health as _sh
+    return jsonify(_sh.collect(current_app._get_current_object()))
+
+
 @api_bp.route("/system/public-ip", methods=["GET"])
 def system_public_ip():
     from modules import system_info as _si

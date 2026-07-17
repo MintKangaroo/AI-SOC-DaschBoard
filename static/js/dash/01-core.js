@@ -126,6 +126,8 @@ function showPanel(name) {
   if (name === 'soar') loadSoar();
   if (name === 'incidents') loadIncidents();
   if (name === 'myinfo') loadMyInfo();
+  if (name === 'health') { loadHealth(); startHealthAuto(); }
+  else if (typeof stopHealthAuto === 'function') stopHealthAuto();
 }
 
 /* ════════════════════ 내 정보 (System Info) ════════════════════ */
