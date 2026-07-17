@@ -213,6 +213,14 @@
 <!-- Three.js + Globe.gl (3D 지구본) -->
 <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
 <script src="https://unpkg.com/globe.gl@2.32.0/dist/globe.gl.min.js"></script>
-<script src="/static/js/dashboard.js"></script>
+<!-- dashboard.js 분할 — 원본 순서대로 로드(동작 동일) -->
+<script src="/static/js/dash/01-core.js"></script>
+<script src="/static/js/dash/02-overview.js"></script>
+<script src="/static/js/dash/03-detection.js"></script>
+<script src="/static/js/dash/04-ml-mitre.js"></script>
+<script src="/static/js/dash/05-svg-intel.js"></script>
+<script src="/static/js/dash/06-sources.js"></script>
+<script src="/static/js/dash/07-ops.js"></script>
+<script src="/static/js/dash/08-response-init.js"></script>
 </body>
 </html>
