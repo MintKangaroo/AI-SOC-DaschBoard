@@ -139,6 +139,63 @@ class AlertStore:
             })
         return result, total
 
+    def aggregate(self, days=14):
+        """운영 지표용 시계열 집계 (최근 N일). timestamp 는 'YYYY-MM-DD HH:MM:SS'."""
+        since = f"-{int(days)} days"
+        with self._lock:
+            c = self._conn
+            # 일별 볼륨 (심각도 분리)
+            by_day = c.execute(
+                """SELECT strftime('%Y-%m-%d', timestamp) d,
+                          SUM(CASE WHEN severity='CRITICAL' THEN 1 ELSE 0 END),
+                          SUM(CASE WHEN severity='HIGH' THEN 1 ELSE 0 END),
+                          SUM(CASE WHEN severity NOT IN ('CRITICAL','HIGH') THEN 1 ELSE 0 END),
+                          COUNT(*)
+                   FROM alerts
+                   WHERE timestamp >= datetime('now', ?, 'localtime')
+                   GROUP BY d ORDER BY d""", (since,)).fetchall()
+            # 상태 분포
+            by_status = dict(c.execute(
+                """SELECT status, COUNT(*) FROM alerts
+                   WHERE timestamp >= datetime('now', ?, 'localtime')
+                   GROUP BY status""", (since,)).fetchall())
+            # 시간대(0~23) × 요일(0=일~6) 히트맵
+            hd = c.execute(
+                """SELECT CAST(strftime('%w', timestamp) AS INT) dow,
+                          CAST(strftime('%H', timestamp) AS INT) hr, COUNT(*)
+                   FROM alerts
+                   WHERE timestamp >= datetime('now', ?, 'localtime')
+                   GROUP BY dow, hr""", (since,)).fetchall()
+            # TOP 위협 유형 / 공격자
+            top_types = c.execute(
+                """SELECT threat_type, COUNT(*) n FROM alerts
+                   WHERE timestamp >= datetime('now', ?, 'localtime')
+                   GROUP BY threat_type ORDER BY n DESC LIMIT 8""", (since,)).fetchall()
+            # 실제 IP 만 (EDR 등 호스트명/빈값 제외 — 최소 3개 점)
+            top_ips = c.execute(
+                """SELECT src_ip, COUNT(*) n FROM alerts
+                   WHERE timestamp >= datetime('now', ?, 'localtime')
+                         AND src_ip LIKE '%.%.%.%'
+                   GROUP BY src_ip ORDER BY n DESC LIMIT 10""", (since,)).fetchall()
+            total = c.execute(
+                """SELECT COUNT(*) FROM alerts
+                   WHERE timestamp >= datetime('now', ?, 'localtime')""", (since,)).fetchone()[0]
+
+        heat = [[0] * 24 for _ in range(7)]
+        for dow, hr, n in hd:
+            if dow is not None and hr is not None:
+                heat[dow][hr] = n
+        return {
+            "days": int(days),
+            "total": total,
+            "by_day": [{"date": d, "critical": cr, "high": hi, "other": ot, "total": tt}
+                       for d, cr, hi, ot, tt in by_day],
+            "by_status": by_status,
+            "heatmap": heat,
+            "top_types": [{"type": t, "count": n} for t, n in top_types],
+            "top_ips": [{"ip": ip, "count": n} for ip, n in top_ips],
+        }
+
     def max_id(self):
         with self._lock:
             row = self._conn.execute("SELECT MAX(id) FROM alerts").fetchone()

@@ -14,6 +14,20 @@ def system_info():
     return jsonify(_si.get_all())
 
 
+@api_bp.route("/metrics/soc", methods=["GET"])
+def metrics_soc():
+    """SOC 운영 지표 — 알림 시계열 + 인시던트 MTTR/MTTA."""
+    from modules import soc_metrics
+    app = current_app._get_current_object()
+    days = min(90, max(1, request.args.get("days", 14, type=int)))
+    store = getattr(app.threat_detector, "store", None)
+    incidents = getattr(app.incidents, "incidents", {})
+    soar_stats = (app.soar.get_status() or {}).get("stats") if hasattr(app, "soar") else None
+    out = soc_metrics.compute(store, incidents, soar_stats, days=days)
+    out["labels"] = app.threat_detector.threat_type_labels()
+    return jsonify(out)
+
+
 @api_bp.route("/system/health", methods=["GET"])
 def system_health():
     """전 모듈 가동 상태·동작 모드(실측/데모/비활성) 집계."""

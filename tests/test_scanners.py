@@ -468,3 +468,47 @@ def test_health_missing_service_marked_down():
     assert out["summary"]["total"] == len(system_health.SPECS)
     assert all(m["mode"] == "down" for m in out["modules"])
     assert out["summary"]["down"] == len(system_health.SPECS)
+
+
+# ─────────────────── SOC 운영 지표 ───────────────────
+
+from modules import soc_metrics
+from modules.alert_store import AlertStore
+from modules.threat_detector import Alert as _MAlert
+
+
+def test_metrics_aggregate_and_mttr(tmp_path):
+    store = AlertStore(str(tmp_path / "m.db"))
+    from datetime import datetime
+    today = datetime.now().strftime("%Y-%m-%d")
+    for i, sev in enumerate(["CRITICAL", "HIGH", "MEDIUM", "CRITICAL"]):
+        a = _MAlert("DDOS", sev, "9.9.9.9", "1.1.1.1", "x")
+        a.timestamp = f"{today} 1{i}:00:00"
+        store.save(a)
+    # 호스트명 src 는 TOP IP 에서 제외돼야 함
+    h = _MAlert("EDR_THREAT", "HIGH", "myhost", "", "x")
+    h.timestamp = f"{today} 12:00:00"
+    store.save(h)
+
+    incidents = {1: {"created": f"{today} 10:00:00", "timeline": [
+        {"ts": f"{today} 10:00:00", "kind": "open", "text": "생성"},
+        {"ts": f"{today} 10:20:00", "kind": "status", "text": "상태 변경: OPEN → INVESTIGATING"},
+        {"ts": f"{today} 12:00:00", "kind": "status", "text": "상태 변경: INVESTIGATING → RESOLVED"},
+    ]}}
+    m = soc_metrics.compute(store, incidents,
+                            soar_stats={"auto_closed_fp": 3, "escalated_tp": 1}, days=7)
+    assert m["kpi"]["total_alerts"] == 5
+    assert m["kpi"]["incidents_resolved"] == 1
+    assert m["kpi"]["mttr_seconds"] == 2 * 3600   # 10:00 → 12:00
+    assert m["kpi"]["mtta_seconds"] == 20 * 60    # 10:00 → 10:20
+    assert m["kpi"]["fp_rate"] == 75.0
+    ips = [x["ip"] for x in m["top_ips"]]
+    assert "9.9.9.9" in ips and "myhost" not in ips
+    store.close()
+
+
+def test_metrics_empty_store_safe():
+    m = soc_metrics.compute(None, incidents={}, soar_stats=None, days=14)
+    assert m["kpi"]["total_alerts"] == 0
+    assert m["kpi"]["mttr"] == "-"
+    assert m["kpi"]["fp_rate"] is None

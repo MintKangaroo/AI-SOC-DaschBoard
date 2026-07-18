@@ -163,6 +163,9 @@
       <i class="fa fa-chevron-down sgroup-chevron"></i>
     </button>
     <div class="sidebar-group-body collapsed" id="sgroup-system">
+      <a href="#metrics" class="sidebar-link" data-panel="metrics">
+        <i class="fa fa-gauge-high"></i><span>운영 지표</span>
+      </a>
       <a href="#health" class="sidebar-link" data-panel="health">
         <i class="fa fa-heart-pulse"></i><span>모듈 헬스</span>
         <span class="badge bg-secondary ms-auto" id="sidebar-health-count">0</span>
@@ -194,6 +197,7 @@
     {% include "panels/edr.html" %}
     {% include "panels/network.html" %}
     {% include "panels/purple.html" %}
+    {% include "panels/metrics.html" %}
     {% include "panels/health.html" %}
     {% include "panels/report.html" %}
     {% include "panels/sigma.html" %}
@@ -233,5 +237,6 @@
 <script src="/static/js/dash/08-response-init.js"></script>
 <script src="/static/js/dash/09-alert-history.js"></script>
 <script src="/static/js/dash/10-health.js"></script>
+<script src="/static/js/dash/11-metrics.js"></script>
 </body>
 </html>
