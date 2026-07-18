@@ -110,6 +110,7 @@ function showPanel(name) {
   if (name === 'sysmon') initSysmonTable();
   if (name === 'ml') { setTimeout(initMLCharts, 50); loadDecisionSupport(); }
   if (name === 'mitre') loadMitreMatrix();
+  if (name === 'campaigns') loadCampaigns();
   if (name === 'threat-intel') loadThreatIntel();
   if (name === 'siem') loadSiem();
   if (name === 'authlog') loadAuthlog();

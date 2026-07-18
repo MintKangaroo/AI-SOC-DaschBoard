@@ -108,6 +108,9 @@
       <a href="#mitre" class="sidebar-link" data-panel="mitre">
         <i class="fa fa-crosshairs"></i><span>MITRE ATT&amp;CK</span>
       </a>
+      <a href="#campaigns" class="sidebar-link" data-panel="campaigns">
+        <i class="fa fa-diagram-project"></i><span>공격 캠페인 (킬체인)</span>
+      </a>
       <a href="#sigma" class="sidebar-link" data-panel="sigma">
         <i class="fa fa-file-shield"></i><span>Sigma 룰 엔진</span>
         <span class="badge bg-secondary ms-auto" id="sidebar-sigma-count">0</span>
@@ -200,6 +203,7 @@
     {% include "panels/sysmon.html" %}
     {% include "panels/ml.html" %}
     {% include "panels/mitre.html" %}
+    {% include "panels/campaigns.html" %}
     {% include "panels/threat-intel.html" %}
     {% include "panels/edr.html" %}
     {% include "panels/network.html" %}
@@ -249,5 +253,6 @@
 <script src="/static/js/dash/11-metrics.js"></script>
 <script src="/static/js/dash/12-audit.js"></script>
 <script src="/static/js/dash/13-watchlist.js"></script>
+<script src="/static/js/dash/14-campaigns.js"></script>
 </body>
 </html>

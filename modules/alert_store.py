@@ -196,6 +196,19 @@ class AlertStore:
             "top_ips": [{"ip": ip, "count": n} for ip, n in top_ips],
         }
 
+    def since(self, hours=24, limit=5000):
+        """최근 N시간 알림(실 IP 출발지만) — 상관관계 분석용. 시간 오름차순."""
+        with self._lock:
+            rows = self._conn.execute(
+                """SELECT id, threat_type, severity, src_ip, dst_ip, timestamp
+                   FROM alerts
+                   WHERE timestamp >= datetime('now', ?, 'localtime')
+                         AND src_ip LIKE '%.%.%.%'
+                   ORDER BY timestamp ASC LIMIT ?""",
+                (f"-{int(hours)} hours", int(limit))).fetchall()
+        return [{"id": r[0], "threat_type": r[1], "severity": r[2],
+                 "src_ip": r[3], "dst_ip": r[4], "timestamp": r[5]} for r in rows]
+
     def _ensure_archive(self):
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS alerts_archive (

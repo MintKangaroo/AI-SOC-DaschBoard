@@ -184,3 +184,21 @@ def watchlist_check():
     wl = current_app._get_current_object().watchlist
     value = (request.get_json() or {}).get("value", "").strip()
     return jsonify({"value": value, "type": wl.match(value)})
+
+
+# ------------------------------------------------------------------ #
+#  킬체인 상관관계 (공격 캠페인)
+# ------------------------------------------------------------------ #
+
+@api_bp.route("/correlation/campaigns", methods=["GET"])
+def correlation_campaigns():
+    """같은 출발지 알림을 시간 윈도우로 묶어 MITRE 킬체인 캠페인으로 구성."""
+    from modules import correlation
+    app = current_app._get_current_object()
+    store = getattr(app.threat_detector, "store", None)
+    hours = min(168, max(1, request.args.get("hours", 24, type=int)))
+    window = min(240, max(1, request.args.get("window", 30, type=int)))
+    labels = app.threat_detector.threat_type_labels()
+    return jsonify(correlation.compute(store, hours=hours,
+                                       window_minutes=window, min_alerts=2,
+                                       labels=labels))

@@ -57,6 +57,17 @@ html, body {
   background: var(--cyan); border-color: var(--cyan); color: #001417; font-weight: 600;
 }
 .btn-cyan:hover { background: #5ee0e8; border-color: #5ee0e8; color: #001417; }
+
+/* ── 킬체인 캠페인 진행도 ── */
+.camp-chain { display: flex; flex-wrap: wrap; align-items: stretch; gap: 4px; }
+.camp-stage {
+  display: inline-flex; flex-direction: column; gap: 2px;
+  padding: 5px 10px; border-radius: 6px;
+  background: rgba(248,81,73,.10); border: 1px solid rgba(248,81,73,.35);
+}
+.camp-stage-tac { font-size: 11px; font-weight: 700; color: var(--red); }
+.camp-stage-tt { font-size: 10.5px; color: var(--text-muted); }
+.camp-arrow { align-self: center; color: var(--text-muted); font-weight: 700; margin: 0 2px; }
 .btn-outline-purple {
   border-color: var(--purple); color: var(--purple); background: transparent;
 }

@@ -571,3 +571,46 @@ def test_alert_archive_moves_old(tmp_path):
     # 재실행 시 추가 이동 없음
     assert store.archive_older_than(90) == 0
     store.close()
+
+
+# ─────────────────── 킬체인 상관관계 ───────────────────
+
+from modules import correlation
+
+
+def test_correlation_builds_killchain():
+    labels = {"PORT_SCAN": "포트 스캔", "BRUTE_FORCE": "무차별 대입",
+              "MALWARE_BEACON": "C2 통신", "DATA_EXFIL": "데이터 유출"}
+    # 한 공격자의 킬체인: 정찰(스캔) → 자격증명(브루트) → C2 → 유출
+    base = "2026-07-18 10:0"
+    rows = [
+        {"id": 1, "threat_type": "PORT_SCAN",      "severity": "MEDIUM",   "src_ip": "8.8.8.8", "dst_ip": "x", "timestamp": base + "0:00"},
+        {"id": 2, "threat_type": "BRUTE_FORCE",    "severity": "HIGH",     "src_ip": "8.8.8.8", "dst_ip": "x", "timestamp": base + "2:00"},
+        {"id": 3, "threat_type": "MALWARE_BEACON", "severity": "CRITICAL", "src_ip": "8.8.8.8", "dst_ip": "x", "timestamp": base + "5:00"},
+        {"id": 4, "threat_type": "DATA_EXFIL",     "severity": "CRITICAL", "src_ip": "8.8.8.8", "dst_ip": "x", "timestamp": base + "8:00"},
+        # 다른 IP, 단일 알림 → 캠페인 안 됨(min_alerts=2)
+        {"id": 5, "threat_type": "PORT_SCAN",      "severity": "LOW",      "src_ip": "1.1.1.1", "dst_ip": "x", "timestamp": base + "1:00"},
+    ]
+    camps = correlation.build_campaigns(rows, window_minutes=30, min_alerts=2, labels=labels)
+    assert len(camps) == 1
+    c = camps[0]
+    assert c["src_ip"] == "8.8.8.8"
+    assert c["alert_count"] == 4
+    assert c["severity"] == "CRITICAL"
+    # 킬체인 순서: 정찰 → 자격증명 → C2 → 유출 (전술 order 오름차순)
+    tac_order = [s["order"] for s in c["stages"]]
+    assert tac_order == sorted(tac_order)
+    assert c["stages"][0]["tactic"] == "Reconnaissance"
+    assert c["stages"][-1]["tactic"] == "Exfiltration"
+    assert c["stage_count"] == 4
+
+
+def test_correlation_time_window_splits():
+    rows = [
+        {"id": 1, "threat_type": "PORT_SCAN",   "severity": "HIGH", "src_ip": "9.9.9.9", "dst_ip": "x", "timestamp": "2026-07-18 10:00:00"},
+        {"id": 2, "threat_type": "BRUTE_FORCE", "severity": "HIGH", "src_ip": "9.9.9.9", "dst_ip": "x", "timestamp": "2026-07-18 10:10:00"},
+        # 2시간 뒤 → 윈도우(30분) 밖 → 별개 세션(단일이라 캠페인 안 됨)
+        {"id": 3, "threat_type": "DDOS",        "severity": "HIGH", "src_ip": "9.9.9.9", "dst_ip": "x", "timestamp": "2026-07-18 12:30:00"},
+    ]
+    camps = correlation.build_campaigns(rows, window_minutes=30, min_alerts=2)
+    assert len(camps) == 1 and camps[0]["alert_count"] == 2
