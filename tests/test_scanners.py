@@ -512,3 +512,34 @@ def test_metrics_empty_store_safe():
     assert m["kpi"]["total_alerts"] == 0
     assert m["kpi"]["mttr"] == "-"
     assert m["kpi"]["fp_rate"] is None
+
+
+# ─────────────────── 전역 감사 로그 ───────────────────
+
+from modules.audit_log import AuditLog
+
+
+def test_audit_record_and_search(tmp_path):
+    au = AuditLog(str(tmp_path / "audit.db"))
+    au.record("kim", "ALERT_ACK", target="알림 #5", detail="확인")
+    au.record("lee", "SOAR_BLOCK", target="1.2.3.4", detail="C2")
+    au.record("kim", "INCIDENT_STATUS", target="인시던트 #2", detail="RESOLVED")
+
+    rows, total = au.search()
+    assert total == 3
+    assert rows[0]["id"] > rows[1]["id"]                 # 최신 우선
+    assert rows[0]["action_label"] == "인시던트 상태변경"  # 라벨 부가
+
+    _, t_actor = au.search(actor="kim")
+    assert t_actor == 2
+    _, t_action = au.search(action="SOAR_BLOCK")
+    assert t_action == 1
+    rows_t, t_text = au.search(text="1.2.3.4")
+    assert t_text == 1 and rows_t[0]["actor"] == "lee"
+    au.close()
+
+
+def test_audit_record_never_raises(tmp_path):
+    au = AuditLog(str(tmp_path / "a.db"))
+    au.close()                       # 닫힌 뒤 기록해도 예외 없이 삼켜야 함
+    au.record("x", "ALERT_ACK")      # 조치 흐름을 막지 않기 위함

@@ -28,6 +28,27 @@ def metrics_soc():
     return jsonify(out)
 
 
+@api_bp.route("/audit", methods=["GET"])
+def audit_search():
+    """전역 감사 로그 검색 (분석가 조치 이력)."""
+    app = current_app._get_current_object()
+    audit = getattr(app, "audit", None)
+    if audit is None:
+        return jsonify({"events": [], "total": 0, "page": 1, "pages": 0, "labels": {}})
+    a = request.args
+    page  = max(1, a.get("page", 1, type=int))
+    limit = min(200, max(1, a.get("limit", 50, type=int)))
+    rows, total = audit.search(
+        action=a.get("action") or None,
+        actor=(a.get("actor") or "").strip() or None,
+        text=(a.get("text") or "").strip() or None,
+        date_from=a.get("from") or None,
+        date_to=a.get("to") or None,
+        limit=limit, offset=(page - 1) * limit)
+    return jsonify({"events": rows, "total": total, "page": page, "limit": limit,
+                    "pages": (total + limit - 1) // limit, "labels": audit.labels()})
+
+
 @api_bp.route("/system/health", methods=["GET"])
 def system_health():
     """전 모듈 가동 상태·동작 모드(실측/데모/비활성) 집계."""

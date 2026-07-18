@@ -127,6 +127,7 @@ function showPanel(name) {
   if (name === 'incidents') loadIncidents();
   if (name === 'myinfo') loadMyInfo();
   if (name === 'metrics') loadMetrics();
+  if (name === 'audit') loadAudit();
   if (name === 'health') { loadHealth(); startHealthAuto(); }
   else if (typeof stopHealthAuto === 'function') stopHealthAuto();
 }

@@ -1,0 +1,72 @@
+    <!-- ════ 감사 로그 패널 ════ -->
+    <div id="panel-audit" class="panel-section d-none">
+      <div class="panel-title">
+        <i class="fa fa-clipboard-list me-2 text-cyan"></i>감사 로그 — 분석가 조치 이력
+        <span class="badge bg-dark ms-2" id="audit-total-badge">-</span>
+        <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="searchAudit(1)">
+          <i class="fa fa-sync me-1"></i>새로고침
+        </button>
+      </div>
+
+      <div class="card-panel mb-3" style="border-left:3px solid var(--cyan); background:rgba(57,208,216,.05);">
+        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
+          <i class="fa fa-lightbulb text-cyan me-2"></i>이 패널은 어떻게 봐야 할까?
+        </div>
+        <div class="small" style="color:#e6edf3; line-height:1.7">
+          <strong>누가·언제·무엇을</strong> 했는지 기록하는 책임추적 로그입니다.
+          알림 확인/종료, IP 수동 차단·해제, 인시던트 상태변경·담당지정·메모, 워치리스트·아카이브 조치가 남습니다.
+          근무 인수인계와 사후 검증(감사)에 사용하세요. (읽기 전용 append-only)
+        </div>
+      </div>
+
+      <div class="card-panel mb-3">
+        <div class="row g-2 align-items-end">
+          <div class="col-6 col-md-2">
+            <label class="form-label small text-muted mb-1">시작일</label>
+            <input type="date" id="audit-from" class="form-control form-control-sm bg-dark text-white border-secondary">
+          </div>
+          <div class="col-6 col-md-2">
+            <label class="form-label small text-muted mb-1">종료일</label>
+            <input type="date" id="audit-to" class="form-control form-control-sm bg-dark text-white border-secondary">
+          </div>
+          <div class="col-6 col-md-3">
+            <label class="form-label small text-muted mb-1">조치 유형</label>
+            <select id="audit-action" class="form-select form-select-sm bg-dark text-white border-secondary">
+              <option value="">전체</option>
+            </select>
+          </div>
+          <div class="col-6 col-md-2">
+            <label class="form-label small text-muted mb-1">분석가</label>
+            <input type="text" id="audit-actor" placeholder="사용자명" class="form-control form-control-sm bg-dark text-white border-secondary">
+          </div>
+          <div class="col-12 col-md-3 d-flex gap-2">
+            <button class="btn btn-sm btn-cyan flex-fill" onclick="searchAudit(1)">
+              <i class="fa fa-magnifying-glass me-1"></i>검색
+            </button>
+            <button class="btn btn-sm btn-outline-secondary" onclick="resetAudit()">
+              <i class="fa fa-rotate-left"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card-panel p-0">
+        <table class="table table-dark table-hover table-sm mb-0">
+          <thead>
+            <tr><th>시각</th><th>분석가</th><th>조치</th><th>대상</th><th>상세</th></tr>
+          </thead>
+          <tbody id="audit-tbody">
+            <tr><td colspan="5" class="text-center text-muted py-4">아직 기록된 조치가 없습니다.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="d-flex align-items-center justify-content-between mt-2 small">
+        <span class="text-muted" id="audit-summary"></span>
+        <div class="d-flex align-items-center gap-2">
+          <button class="btn btn-xs btn-outline-secondary" id="audit-prev" onclick="pageAudit(-1)" disabled><i class="fa fa-chevron-left"></i></button>
+          <span id="audit-page-label" class="text-muted">-</span>
+          <button class="btn btn-xs btn-outline-secondary" id="audit-next" onclick="pageAudit(1)" disabled><i class="fa fa-chevron-right"></i></button>
+        </div>
+      </div>
+    </div>

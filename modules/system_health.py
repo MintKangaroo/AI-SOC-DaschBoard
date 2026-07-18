@@ -42,11 +42,12 @@ SPECS = [
     # 시스템
     ("hash_checker",    "해시 검사기",      "시스템"),
     ("daily_report",    "일일 AI 리포트",   "시스템"),
+    ("audit",           "감사 로그",        "시스템"),
 ]
 
 # 모드 개념이 없는(항상 실동작) 라이브러리성 모듈
 _LIVE_MODULES = {"threat_detector", "sysmon_parser", "mitre_tracker",
-                 "decision_support", "incidents", "hash_checker", "sigma"}
+                 "decision_support", "incidents", "hash_checker", "sigma", "audit"}
 
 
 def _safe(fn, default=None):

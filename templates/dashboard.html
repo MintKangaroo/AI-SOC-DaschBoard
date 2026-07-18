@@ -170,6 +170,9 @@
         <i class="fa fa-heart-pulse"></i><span>모듈 헬스</span>
         <span class="badge bg-secondary ms-auto" id="sidebar-health-count">0</span>
       </a>
+      <a href="#audit" class="sidebar-link" data-panel="audit">
+        <i class="fa fa-clipboard-list"></i><span>감사 로그</span>
+      </a>
       <a href="#report" class="sidebar-link" data-panel="report">
         <i class="fa fa-file-lines"></i><span>일일 AI 리포트</span>
       </a>
@@ -199,6 +202,7 @@
     {% include "panels/purple.html" %}
     {% include "panels/metrics.html" %}
     {% include "panels/health.html" %}
+    {% include "panels/audit.html" %}
     {% include "panels/report.html" %}
     {% include "panels/sigma.html" %}
     {% include "panels/vulnscan.html" %}
@@ -238,5 +242,6 @@
 <script src="/static/js/dash/09-alert-history.js"></script>
 <script src="/static/js/dash/10-health.js"></script>
 <script src="/static/js/dash/11-metrics.js"></script>
+<script src="/static/js/dash/12-audit.js"></script>
 </body>
 </html>

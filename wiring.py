@@ -28,6 +28,7 @@ from modules.soar import SOAREngine
 from modules.decision_support import DecisionSupport
 from modules.incidents import IncidentManager
 from modules.authlog_parser import AuthLogMonitor
+from modules.audit_log import AuditLog
 
 
 def build_services(app, socketio):
@@ -115,7 +116,11 @@ def build_services(app, socketio):
         "ip_reputation": ip_reputation, "mitre": mitre_tracker, "incidents": incidents,
     })
 
+    # 전역 감사 로그 (분석가 조치 기록)
+    audit = AuditLog(app.config.get("AUDIT_DB", "data/audit.db"))
+
     # app 컨텍스트에 서비스 등록
+    app.audit           = audit
     app.packet_analyzer = packet_analyzer
     app.threat_detector = threat_detector
     app.sysmon_parser   = sysmon_parser

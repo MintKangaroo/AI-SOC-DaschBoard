@@ -1,8 +1,20 @@
 import os
 
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, session
 
 api_bp = Blueprint("api", __name__)
+
+
+def _actor():
+    """조치 주체(로그인 사용자). 감사 로그·워치리스트 기록용."""
+    return session.get("user") or "system"
+
+
+def audit_record(action, target="", detail=""):
+    """전역 감사 로그에 분석가 조치 1건 기록 (app.audit 없으면 무시)."""
+    audit = getattr(current_app._get_current_object(), "audit", None)
+    if audit:
+        audit.record(_actor(), action, target, detail)
 
 
 def _hash_scan_allowed(path):

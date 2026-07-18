@@ -7,3 +7,4 @@ logs/
 data/alerts.db
 data/reports/
 data/*.log
+data/audit.db

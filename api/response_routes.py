@@ -1,7 +1,7 @@
 """대응: SOAR · 인시던트 · 대시보드 요약
    (api_bp 공유 — api/routes.py 가 임포트해 라우트를 등록한다)"""
 from flask import request, jsonify, current_app
-from api._common import api_bp, get_services, _mitre, _hash_scan_allowed
+from api._common import api_bp, get_services, _mitre, _hash_scan_allowed, audit_record
 
 
 # ------------------------------------------------------------------ #
@@ -31,7 +31,10 @@ def soar_block():
     ip = (data.get("ip") or "").strip()
     if not ip:
         return jsonify({"error": "ip 가 필요합니다"}), 400
-    ok = _soar().manual_block(ip, data.get("reason", "분석가 수동 차단"))
+    reason = data.get("reason", "분석가 수동 차단")
+    ok = _soar().manual_block(ip, reason)
+    if ok:
+        audit_record("SOAR_BLOCK", target=ip, detail=reason)
     return jsonify({"success": ok, "message": "차단됨" if ok else "이미 차단된 IP"})
 
 
@@ -42,6 +45,8 @@ def soar_unblock():
     if not ip:
         return jsonify({"error": "ip 가 필요합니다"}), 400
     ok = _soar().manual_unblock(ip)
+    if ok:
+        audit_record("SOAR_UNBLOCK", target=ip)
     return jsonify({"success": ok})
 
 
@@ -80,6 +85,14 @@ def incident_update(inc_id):
     ok = _incidents().update(inc_id, status=status,
                              assignee=data.get("assignee"),
                              note=data.get("note"))
+    if ok:
+        if status:
+            audit_record("INCIDENT_STATUS", target=f"인시던트 #{inc_id}", detail=status)
+        if data.get("assignee") is not None:
+            audit_record("INCIDENT_ASSIGN", target=f"인시던트 #{inc_id}",
+                         detail=data.get("assignee") or "(해제)")
+        if data.get("note"):
+            audit_record("INCIDENT_NOTE", target=f"인시던트 #{inc_id}", detail=data.get("note"))
     return jsonify({"success": ok})
 
 

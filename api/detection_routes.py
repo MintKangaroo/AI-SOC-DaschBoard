@@ -1,7 +1,7 @@
 """탐지·수집: 패킷 · 위협알림(이력/CSV) · Sysmon · 해시
    (api_bp 공유 — api/routes.py 가 임포트해 라우트를 등록한다)"""
 from flask import request, jsonify, current_app
-from api._common import api_bp, get_services, _mitre, _hash_scan_allowed
+from api._common import api_bp, get_services, _mitre, _hash_scan_allowed, audit_record
 
 
 # ------------------------------------------------------------------ #
@@ -107,6 +107,10 @@ def update_alert_status(alert_id):
     ok = td.update_alert_status(alert_id, status,
                                 note=data.get("note"),
                                 assignee=data.get("assignee"))
+    if ok:
+        act = {"ACK": "ALERT_ACK", "CLOSED": "ALERT_CLOSE",
+               "OPEN": "ALERT_REOPEN"}.get(status, "ALERT_ACK")
+        audit_record(act, target=f"알림 #{alert_id}", detail=data.get("note") or "")
     return jsonify({"success": ok})
 
 
