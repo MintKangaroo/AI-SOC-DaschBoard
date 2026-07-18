@@ -181,6 +181,16 @@ def start_services(app, socketio):
     print(f"[Notify] ntfy 푸시 "
           f"{'활성' if app.notifier.active else '비활성(NTFY_ENABLED/NTFY_TOPIC 설정 시 폰 알림)'}")
 
+    # 알림 보존: 옵트인 시 시작할 때 N일 경과분 아카이브 (무손실 이동)
+    if app.config.get("ALERT_AUTO_ARCHIVE") and getattr(app.threat_detector, "store", None):
+        try:
+            days = app.config.get("ALERT_RETENTION_DAYS", 90)
+            moved = app.threat_detector.store.archive_older_than(days)
+            if moved:
+                print(f"[Retention] {days}일 경과 알림 {moved}건 아카이브")
+        except Exception as e:
+            print(f"[Retention] 자동 아카이브 실패: {e}")
+
     # ML 분석기에 패킷 통계 주기적 공급
     import threading as _t
 

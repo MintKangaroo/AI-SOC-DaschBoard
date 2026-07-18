@@ -543,3 +543,31 @@ def test_audit_record_never_raises(tmp_path):
     au = AuditLog(str(tmp_path / "a.db"))
     au.close()                       # 닫힌 뒤 기록해도 예외 없이 삼켜야 함
     au.record("x", "ALERT_ACK")      # 조치 흐름을 막지 않기 위함
+
+
+# ─────────────────── 알림 보존·아카이브 ───────────────────
+
+def test_alert_archive_moves_old(tmp_path):
+    store = AlertStore(str(tmp_path / "r.db"))
+    from datetime import datetime, timedelta
+    old_ts = (datetime.now() - timedelta(days=100)).strftime("%Y-%m-%d %H:%M:%S")
+    new_ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    a_old = _MAlert("DDOS", "HIGH", "1.1.1.1", "2.2.2.2", "오래된")
+    a_old.timestamp = old_ts
+    a_new = _MAlert("PORT_SCAN", "HIGH", "3.3.3.3", "4.4.4.4", "최근")
+    a_new.timestamp = new_ts
+    store.save(a_old); store.save(a_new)
+
+    st = store.retention_stats()
+    assert st["live"] == 2 and st["archived"] == 0
+
+    moved = store.archive_older_than(90)
+    assert moved == 1                       # 100일 전만 이동
+    st2 = store.retention_stats()
+    assert st2["live"] == 1 and st2["archived"] == 1
+    # 활성 테이블엔 최근 알림만 남음 (이력 검색 대상)
+    rows, total = store.search()
+    assert total == 1 and rows[0]["src_ip"] == "3.3.3.3"
+    # 재실행 시 추가 이동 없음
+    assert store.archive_older_than(90) == 0
+    store.close()

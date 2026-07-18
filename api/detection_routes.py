@@ -97,6 +97,35 @@ def alerts_history_export():
                              "attachment; filename=alert_history.csv"})
 
 
+@api_bp.route("/alerts/retention", methods=["GET"])
+def alerts_retention():
+    """알림 보존 현황 (활성/아카이브 건수, 최고古 시각, 보존기간)."""
+    app = current_app._get_current_object()
+    store = getattr(app.threat_detector, "store", None)
+    days = app.config.get("ALERT_RETENTION_DAYS", 90)
+    if store is None:
+        return jsonify({"live": 0, "archived": 0, "retention_days": days})
+    out = store.retention_stats()
+    out["retention_days"] = days
+    out["auto_archive"] = app.config.get("ALERT_AUTO_ARCHIVE", False)
+    return jsonify(out)
+
+
+@api_bp.route("/alerts/archive", methods=["POST"])
+def alerts_archive():
+    """N일 경과 알림을 아카이브 테이블로 이동(무손실). 기본 보존기간 사용."""
+    app = current_app._get_current_object()
+    store = getattr(app.threat_detector, "store", None)
+    if store is None:
+        return jsonify({"success": False, "error": "알림 DB 없음"}), 400
+    days = request.args.get("days", app.config.get("ALERT_RETENTION_DAYS", 90), type=int)
+    days = max(1, days)
+    moved = store.archive_older_than(days)
+    audit_record("ALERT_ARCHIVE", target=f"{days}일 경과", detail=f"{moved}건 이동")
+    return jsonify({"success": True, "moved": moved, "days": days,
+                    **store.retention_stats()})
+
+
 @api_bp.route("/alerts/<int:alert_id>/status", methods=["PUT"])
 def update_alert_status(alert_id):
     _, td, *_ = get_services()

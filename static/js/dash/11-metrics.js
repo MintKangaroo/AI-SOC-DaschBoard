@@ -6,6 +6,31 @@ function loadMetrics() {
     .then(r => r.json())
     .then(d => { if (d.labels) window._threatTypeLabels = d.labels; renderMetrics(d); })
     .catch(() => {});
+  loadRetention();
+}
+
+function loadRetention() {
+  fetch('/api/alerts/retention').then(r => r.json()).then(d => {
+    const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+    set('mr-live', (d.live ?? 0).toLocaleString());
+    set('mr-archived', (d.archived ?? 0).toLocaleString());
+    set('mr-oldest', d.oldest || '-');
+    set('mr-days', d.retention_days ?? '-');
+    const lbl = document.getElementById('mr-archive-label');
+    if (lbl) lbl.textContent = `${d.retention_days ?? ''}일 경과분 아카이브`;
+  }).catch(() => {});
+}
+
+function runArchive() {
+  const msg = document.getElementById('mr-msg');
+  if (!confirm('보존기간이 지난 알림을 아카이브 테이블로 이동합니다. (무손실, 이력 검색에선 제외됨)\n계속할까요?')) return;
+  fetch('/api/alerts/archive', { method: 'POST' }).then(r => r.json()).then(d => {
+    if (msg) {
+      msg.className = 'small mt-2 ' + (d.success ? 'text-success' : 'text-danger');
+      msg.textContent = d.success ? `${(d.moved || 0).toLocaleString()}건 아카이브 완료` : (d.error || '실패');
+    }
+    loadRetention();
+  }).catch(() => { if (msg) { msg.className = 'small mt-2 text-danger'; msg.textContent = '요청 실패'; } });
 }
 
 function renderMetrics(d) {

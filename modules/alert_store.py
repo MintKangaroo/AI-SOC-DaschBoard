@@ -196,6 +196,54 @@ class AlertStore:
             "top_ips": [{"ip": ip, "count": n} for ip, n in top_ips],
         }
 
+    def _ensure_archive(self):
+        self._conn.execute("""
+            CREATE TABLE IF NOT EXISTS alerts_archive (
+                id          INTEGER PRIMARY KEY,
+                threat_type TEXT, severity TEXT, src_ip TEXT, dst_ip TEXT,
+                description TEXT, details TEXT, timestamp TEXT,
+                status TEXT, note TEXT, assignee TEXT,
+                archived_at TEXT
+            )""")
+
+    def retention_stats(self):
+        """보존 현황 — 활성/아카이브 건수, 최고(古)/최신 시각."""
+        with self._lock:
+            self._ensure_archive()
+            live = self._conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0]
+            oldest, newest = self._conn.execute(
+                "SELECT MIN(timestamp), MAX(timestamp) FROM alerts").fetchone()
+            arch = self._conn.execute("SELECT COUNT(*) FROM alerts_archive").fetchone()[0]
+            arch_newest = self._conn.execute(
+                "SELECT MAX(timestamp) FROM alerts_archive").fetchone()[0]
+        return {"live": live, "archived": arch, "oldest": oldest,
+                "newest": newest, "archived_newest": arch_newest}
+
+    def archive_older_than(self, days):
+        """N일 이전 알림을 아카이브 테이블로 이동(무손실). 이동 건수 반환."""
+        from datetime import datetime
+        days = int(days)
+        with self._lock:
+            self._ensure_archive()
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            cutoff_expr = "datetime('now', ?, 'localtime')"
+            arg = f"-{days} days"
+            moved = self._conn.execute(
+                f"SELECT COUNT(*) FROM alerts WHERE timestamp < {cutoff_expr}",
+                (arg,)).fetchone()[0]
+            if moved:
+                self._conn.execute(
+                    f"""INSERT OR REPLACE INTO alerts_archive
+                        (id, threat_type, severity, src_ip, dst_ip, description,
+                         details, timestamp, status, note, assignee, archived_at)
+                        SELECT id, threat_type, severity, src_ip, dst_ip, description,
+                               details, timestamp, status, note, assignee, ?
+                        FROM alerts WHERE timestamp < {cutoff_expr}""", (now, arg))
+                self._conn.execute(
+                    f"DELETE FROM alerts WHERE timestamp < {cutoff_expr}", (arg,))
+                self._conn.commit()
+        return moved
+
     def max_id(self):
         with self._lock:
             row = self._conn.execute("SELECT MAX(id) FROM alerts").fetchone()

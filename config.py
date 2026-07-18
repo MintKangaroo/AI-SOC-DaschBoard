@@ -58,6 +58,10 @@ class Config:
     REPORT_HOUR = int(os.getenv("REPORT_HOUR", 8))     # 매일 자동 생성 시각(0~23)
     REPORT_DIR = os.getenv("REPORT_DIR", "data/reports")
 
+    # 알림 보존·아카이브
+    ALERT_RETENTION_DAYS = int(os.getenv("ALERT_RETENTION_DAYS", 90))  # N일 경과분 아카이브
+    ALERT_AUTO_ARCHIVE = os.getenv("ALERT_AUTO_ARCHIVE", "False").lower() == "true"
+
     # 자동화 취약점 패치 (Ansible)
     PATCH_APPLY_ENABLED = os.getenv("PATCH_APPLY_ENABLED", "False")  # 실제 적용 허용 여부
     PATCH_PLAYBOOK_DIR = os.getenv("PATCH_PLAYBOOK_DIR", "data/ansible")
