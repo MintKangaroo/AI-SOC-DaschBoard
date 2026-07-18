@@ -29,6 +29,8 @@ SocketIO emit은 `deque`·`Lock`으로 스레드 안전하게 처리한다.
 |------|--------|------|------|
 | `ip_reputation` | IPReputation | AbuseIPDB 조회(캐시·데모 fallback), 정탐 근거 강화 | `check(ip)`, 사설/자기IP 제외 |
 | `threat_intel` | ThreatIntel | 악성 IP/URL 피드 관리·매칭 | `_parse_ip_list()` |
+| `watchlist` | Watchlist | IOC(IP/도메인/해시) 워치리스트, 알림 대조 히트 집계(능동 헌팅) | `match_alert()` · `watchlist_hit` |
+| `correlation` | — | 같은 출발지 알림을 시간 윈도우로 묶어 MITRE 전술 순서 캠페인 구성 | `build_campaigns()` · `compute()` |
 | `ml_analyst` | MLAnalyst | IF·RF·LSTM·Q-Learning 병렬 분석·학습·피드백 | `ml_analysis`, FP 피드백→임계값 튜닝 |
 | `ai_analyst` | AIAnalyst | Claude 비동기 분석 큐·대응 권고·챗봇·리포트 텍스트 | `ai_analysis` · `generate_text()` |
 | `decision_support` | DecisionSupport | 위협 그룹핑 + 정오탐 학습 prior | `get_recommendations()` |
@@ -51,20 +53,32 @@ SocketIO emit은 `deque`·`Lock`으로 스레드 안전하게 처리한다.
 | `patch_manager` | PatchManager | 다중 서버 Ansible 일괄 명령/패치, dry-run 기본 | `patch_job`, 파괴적 명령 blocklist |
 | `purple_team` | PurpleTeam | 7종 모의공격을 실제 탐지엔진에 주입해 커버리지 검증 | `run_all()`, RFC5737 TEST-NET 출발지 |
 
+## ⑥ SOC 운영 · 거버넌스
+
+| 모듈 | 클래스 | 역할 | 핵심 |
+|------|--------|------|------|
+| `soc_metrics` | — | MTTR/MTTA·오탐율·종결율·일별추세·요일×시간 히트맵·TOP 위협/공격자 | `compute(store, incidents, soar_stats, days)` |
+| `audit_log` | AuditLog | 알림 ACK/종료·SOAR 차단·인시던트 변경을 append-only 기록 | `record(actor, action, target)` · `search()` |
+| `system_health` | — | 전 모듈 상태(real/demo/off/live/down) 중앙 방어적 집계 | `collect(app)`, `SPECS` 리스트 |
+
 ## 플랫폼
 
 | 모듈 | 클래스 | 역할 |
 |------|--------|------|
 | `auth` | AuthManager | 로그인(pbkdf2), IP별 브루트포스 락아웃, 세션 |
 | `geoip` | AttackMapTracker | GeoIP 조회, 공격 지도 스트림(`map_attack`) |
-| `alert_store` | AlertStore | 알림 영속화·조회 |
+| `alert_store` | AlertStore | 알림 영속화(alerts.db)·전체 이력 검색·집계·보존/아카이브(무손실 `alerts_archive`) |
 | `system_info` | — | 호스트/인터페이스 정보 |
+
+> 서비스 생성·교차배선·시작은 `app.py`가 아니라 **`wiring.py`**(`build_services` / `start_services`)에서 처리한다.
+> API는 도메인별로 분리돼 있고(`api/{detection,analysis,monitoring,scan,response}_routes.py`) 모두 `api/_common.py`의 `api_bp`를 공유한다.
 
 ## 확장 방법 (새 시스템 연동)
 
 1. `modules/` 에 새 파서 모듈 추가 — `start()`·`stop()`·`get_*()` 구현 + 데모 fallback
-2. `app.py` 에서 초기화 후 `app.<name>` 등록, `<name>.start(demo=demo)` 호출
-3. `api/routes.py` 에 `/api/...` 엔드포인트 추가
-4. `templates/dashboard.html` 에 사이드바 링크 + 패널 추가
-5. `static/js/dashboard.js` 에 `socket.on(...)` 수신 + 렌더 함수, 패널 switch에 `load<Name>()` 배선
-6. `tests/` 에 파싱·판정·안전장치 단위 테스트 추가 (네트워크·외부실행 없이)
+2. `wiring.build_services()` 에서 초기화 후 `app.<name>` 등록, `wiring.start_services()` 에서 `<name>.start(demo=demo)` 호출
+3. 알맞은 `api/{도메인}_routes.py` 에 `/api/...` 엔드포인트 추가 (`from api._common import api_bp, get_services`)
+4. `templates/panels/<name>.html` 패널 추가 + `dashboard.html` 에 `{% include %}` 및 사이드바 링크
+5. `static/js/dash/*.js` 에 `socket.on(...)` 수신 + 렌더 함수, `showPanel()` 훅에 `load<Name>()` 배선(스크립트 태그 등록)
+6. 모듈 헬스에 표시하려면 `system_health.SPECS` 에 `(key, label, category)` 한 줄 추가
+7. `tests/` 에 파싱·판정·안전장치 단위 테스트 추가 (네트워크·외부실행 없이)

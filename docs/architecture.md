@@ -7,17 +7,18 @@ flowchart TB
   subgraph Client["브라우저 (클라이언트)"]
     UI["Bootstrap 5 · Chart.js · SVG 시각화 · Leaflet · Socket.IO"]
   end
-  subgraph Flask["Flask 앱 (app.py)"]
-    API["REST API Blueprint<br/>/api/..."]
+  subgraph Flask["Flask 앱 (app.py + wiring.py)"]
+    API["REST API Blueprint(도메인별 분리)<br/>/api/..."]
     WS["Flask-SocketIO (threading)<br/>실시간 이벤트 push"]
     AUTH["before_request 인증 가드<br/>(auth.py)"]
   end
-  subgraph Services["서비스 레이어 (28 모듈, 독립 데몬 스레드)"]
+  subgraph Services["서비스 레이어 (32 모듈, 독립 데몬 스레드)"]
     COLLECT["수집: packet_analyzer · sysmon_parser<br/>access_log_parser · authlog_parser · net_monitor"]
     DETECT["탐지: threat_detector · sigma_engine<br/>edr · hash_checker · mitre_attack"]
-    INTEL["인텔·분석: ip_reputation · threat_intel<br/>ml_analyst · ai_analyst · decision_support"]
+    INTEL["인텔·분석: ip_reputation · threat_intel · watchlist<br/>correlation · ml_analyst · ai_analyst · decision_support"]
     RESPOND["대응: soar · incidents · notifier · daily_report"]
     VULN["취약점·검증: vuln_scanner · web_fuzzer<br/>patch_manager · purple_team"]
+    OPS["운영: soc_metrics · audit_log · system_health<br/>alert_store"]
   end
   subgraph External["외부 데이터·시스템"]
     SRC["네트워크 IF · auth.log · Sysmon<br/>봇 access log · psutil"]
@@ -28,10 +29,12 @@ flowchart TB
   Flask --> Services
   COLLECT --> DETECT --> INTEL --> RESPOND
   INTEL --> VULN
+  RESPOND --> OPS
   Services <--> External
 ```
 
-Flask 앱 팩토리(`create_app`)가 각 서비스를 초기화해 `app.<name>` 으로 등록하고,
+Flask 앱 팩토리(`create_app`)는 SocketIO 이벤트만 담당하고, 서비스 생성·교차배선·시작은
+`wiring.py`(`build_services` / `start_services`)가 처리해 각 서비스를 `app.<name>` 으로 등록하고
 `socketio` 를 주입한다. 각 모듈은 `start()` / `stop()` / `get_*()` 인터페이스로 독립 동작하며
 데모 fallback을 포함한다.
 
@@ -91,6 +94,25 @@ vuln_scanner.scan() → nmap -sV(+vulners) 또는 소켓 배너 스캔
      (localhost=직접 apt/dpkg, 원격=ansible -m shell 읽기전용)
   → verdict: vulnerable(정탐) / patched(오탐) / unknown
   → emit("vulnscan_host")
+```
+
+**IOC 워치리스트 · 킬체인 상관관계**
+```
+threat_detector._add_alert() → watchlist.match_alert(src_ip, dst_ip)
+  → 히트 집계 + emit("watchlist_hit") + alert.details["watchlist"]
+
+alert_store.since(hours) → correlation.build_campaigns()
+  → 같은 src_ip를 시간 윈도우로 그룹 → MITRE 전술 순서로 단계 정렬
+  → 다단계 캠페인(공격 스토리) → /api/correlation/campaigns
+```
+
+**SOC 운영 지표 · 감사 로그**
+```
+alert_store.aggregate(days) + incidents 타임라인 → soc_metrics.compute()
+  → MTTR/MTTA·오탐율·히트맵·TOP → /api/metrics/soc
+
+알림 ACK/종료·SOAR 차단·인시던트 변경 → api._common.audit_record()
+  → audit_log.record(actor=session, ...) (append-only) → /api/audit
 ```
 
 ## 스레드 구조

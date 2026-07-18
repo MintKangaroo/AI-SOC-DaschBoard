@@ -5,7 +5,7 @@
 > 탐지부터 자동대응(SOAR)·취약점 관리까지 SOC 업무 흐름을 하나의 대시보드로 구현했습니다.
 
 실제 SOC 운영 개념(SIEM · SOAR · EDR · Threat Intelligence · Detection Engineering ·
-Vulnerability Management · Purple Team)을 28개 모듈 / 약 10,000 LOC로 구현한 **개인 학습·포트폴리오 프로젝트**입니다.
+Vulnerability Management · Purple Team · SOC Metrics)을 32개 모듈 / 약 11,000 LOC로 구현한 **개인 학습·포트폴리오 프로젝트**입니다.
 모든 모듈은 **데모 fallback**을 갖춰 실제 센서(Npcap·Sysmon·nmap·ansible 등) 없이도 전체 기능이 동작합니다.
 
 ---
@@ -21,6 +21,8 @@ SOC의 실무 난제는 알림 홍수 속에서 **진짜 위협만 골라내는 
 | **AI 트리아지** | `soar` — 정탐→에스컬레이션/자동차단, 오탐→자동 종결 | 분석가 피로도 감소 |
 | **ML 피드백 루프** | `ml_analyst` Q-Learning — FP 버튼 → 보상 → 임계값 자동 튜닝 | 운영하며 스스로 정밀도 향상 |
 | **퍼플팀 회귀검증** | `purple_team` — 7종 모의공격을 실제 탐지엔진에 주입 | 룰 변경 후 탐지 커버리지 검증 |
+| **킬체인 상관관계** | `correlation` — 산발적 알림을 같은 출발지·MITRE 전술 순서로 캠페인화 | 다단계 공격을 단건 알림에 묻히지 않게 |
+| **SOC 운영 지표** | `soc_metrics` — MTTD/MTTR/MTTA·오탐율·처리량 계량 | 관제 성숙도를 수치로 관리 |
 
 ---
 
@@ -43,10 +45,11 @@ flowchart LR
   end
   subgraph I["③ 인텔 · 분석"]
     E1[IP 평판<br/>AbuseIPDB]
-    E2[위협 인텔 피드]
+    E2[위협 인텔·IOC 워치리스트]
     E3[자체 ML<br/>IF·RF·LSTM·QL]
     E4[Claude AI 분석]
     E5[MITRE ATT&CK 매핑]
+    E6[킬체인 상관관계<br/>공격 캠페인]
   end
   subgraph R["④ 대응 · SOAR"]
     F1[AI 트리아지<br/>정탐/오탐]
@@ -95,6 +98,8 @@ flowchart LR
 ### ③ 위협 인텔 · 분석
 - **IP 평판** — AbuseIPDB 조회(캐시·데모 fallback), 정탐 근거 강화 (`ip_reputation`)
 - **위협 인텔** — 악성 IP/URL 피드 관리 (`threat_intel`)
+- **IOC 워치리스트** — 주시할 IP/도메인/해시 등록 → 이후 알림 등장 시 히트 집계·실시간 통보(능동 헌팅) (`watchlist`)
+- **킬체인 상관관계** — 같은 출발지 알림을 시간 윈도우로 묶어 MITRE 전술 순서 공격 스토리로 구성 (`correlation`)
 - **자체 ML** — Isolation Forest · Random Forest · LSTM Autoencoder · Q-Learning (`ml_analyst`)
 - **Claude AI** — 비동기 큐 기반 알림 분석·대응 권고·챗봇 (`ai_analyst`)
 - **의사결정 지원** — 위협 그룹핑 + 정오탐 학습 prior (`decision_support`)
@@ -111,9 +116,16 @@ flowchart LR
 - **Ansible 패치** — 다중 서버 일괄 명령/패치, dry-run 기본·파괴적 명령 차단 (`patch_manager`)
 - **퍼플팀** — 안전한 모의공격으로 탐지 파이프라인 회귀검증 (`purple_team`)
 
+### ⑥ SOC 운영 · 거버넌스
+- **운영 지표** — MTTR/MTTA·오탐율·종결율·일별 추세·요일×시간 히트맵·TOP 위협/공격자 (`soc_metrics`)
+- **감사 로그** — 누가·언제·무엇을(알림 ACK/종료·SOAR 차단·인시던트 변경) append-only 기록 (`audit_log`)
+- **알림 보존·아카이브** — 보존기간 경과 알림을 아카이브 테이블로 무손실 이동, 활성 DB 경량 유지 (`alert_store`)
+- **모듈 헬스** — 전 모듈 상태(real/demo/off/live)를 중앙에서 방어적 집계 (`system_health`)
+
 ### 플랫폼
 - **인증** — 로그인(pbkdf2 해시), IP별 브루트포스 락아웃, 세션 가드 (`auth`)
 - **공격 지도** — GeoIP 기반 공격 출발지 시각화 (`geoip`)
+- **알림 저장소** — 알림 영속화(alerts.db)·전체 이력 검색·집계 (`alert_store`)
 
 ---
 
@@ -136,7 +148,7 @@ flowchart LR
 - **AI** — Anthropic Claude API(비동기 큐) · 자체 IF/RF/LSTM/Q-Learning
 - **자동화** — Ansible(ad-hoc·플레이북) · ntfy
 - **프론트** — Bootstrap 5 · Chart.js · 순수 SVG 시각화 · Leaflet · Socket.IO
-- **테스트** — pytest **126개** (탐지·SOAR·인증·스캐너·퍼저·안전장치)
+- **테스트** — pytest **142개** (탐지·SOAR·인증·스캐너·퍼저·안전장치)
 
 ---
 
@@ -175,19 +187,23 @@ PORT=5055 ./venv/bin/python app.py
 
 ```
 SOC_DashBoard/
-├── app.py                    # Flask 앱 팩토리 · 서비스 초기화 · SocketIO
+├── app.py                    # Flask 앱 팩토리 · SocketIO 이벤트
+├── wiring.py                 # 서비스 생성·교차배선·시작(build/start_services)
 ├── config.py                 # 환경변수 기반 설정
-├── modules/                  # 28개 관제 모듈 (SOC 도메인별)
+├── modules/                  # 32개 관제 모듈 (SOC 도메인별)
 │   ├── 수집    access_log_parser · authlog_parser · packet_analyzer · sysmon_parser · net_monitor
 │   ├── 탐지    threat_detector · sigma_engine · edr · hash_checker · mitre_attack
-│   ├── 인텔    ip_reputation · threat_intel · ml_analyst · ai_analyst · decision_support
+│   ├── 인텔    ip_reputation · threat_intel · watchlist · correlation · ml_analyst · ai_analyst · decision_support
 │   ├── 대응    soar · incidents · notifier · daily_report
 │   ├── 취약점  vuln_scanner · web_fuzzer · patch_manager · purple_team
+│   ├── 운영    soc_metrics · audit_log · system_health
 │   └── 플랫폼  auth · geoip · alert_store · system_info
-├── api/routes.py             # REST API Blueprint
-├── templates/dashboard.html  # 단일 페이지 대시보드 (25개 패널)
-├── static/                   # CSS · JS(SocketIO 처리·차트·지도)
-├── tests/                    # pytest 126개
+├── api/                      # REST API Blueprint (도메인별 분리 + _common)
+├── templates/
+│   ├── dashboard.html        # 레이아웃·사이드바
+│   └── panels/               # 패널별 UI 조각 (29개, Jinja include)
+├── static/js/dash/           # 패널별 JS (01~14, 순서대로 로드)
+├── tests/                    # pytest 142개
 ├── data/                     # 모델·룰·리포트·해시 DB
 └── docs/                     # 상세 문서
 ```
