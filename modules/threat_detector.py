@@ -35,6 +35,7 @@ THREAT_TYPES = {
     "NETWORK_ANOMALY": "네트워크 이상",
     "SIGMA_MATCH": "Sigma 룰 탐지",
     "WEB_ATTACK": "웹 공격 (SQLi/XSS 등)",
+    "HONEYPOT": "허니팟 유인 탐지",
 }
 
 

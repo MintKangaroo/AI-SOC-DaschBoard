@@ -125,6 +125,18 @@ def syslog_events():
 
 
 # ------------------------------------------------------------------ #
+#  허니팟 (유인 서비스)
+# ------------------------------------------------------------------ #
+
+@api_bp.route("/integrations/honeypot", methods=["GET"])
+def honeypot_status():
+    hp = getattr(current_app._get_current_object(), "honeypot", None)
+    if hp is None:
+        return jsonify({"stats": {}, "config": {}, "events": []})
+    return jsonify(hp.get_status())
+
+
+# ------------------------------------------------------------------ #
 #  IP 평판 조회 (AbuseIPDB)
 # ------------------------------------------------------------------ #
 

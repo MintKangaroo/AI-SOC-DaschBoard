@@ -69,6 +69,10 @@
         <i class="fa fa-satellite-dish"></i><span>Syslog 수신</span>
         <span class="badge bg-secondary ms-auto" id="sidebar-syslog-count">0</span>
       </a>
+      <a href="#honeypot" class="sidebar-link" data-panel="honeypot">
+        <i class="fa fa-shield-halved"></i><span>허니팟</span>
+        <span class="badge bg-secondary ms-auto" id="sidebar-honeypot-count">0</span>
+      </a>
       <a href="#traffic" class="sidebar-link" data-panel="traffic">
         <i class="fa fa-chart-line"></i><span>네트워크 트래픽</span>
       </a>
@@ -224,6 +228,7 @@
     {% include "panels/myinfo.html" %}
     {% include "panels/siem.html" %}
     {% include "panels/syslog.html" %}
+    {% include "panels/honeypot.html" %}
     {% include "panels/authlog.html" %}
     {% include "panels/reputation.html" %}
     {% include "panels/watchlist.html" %}
@@ -260,5 +265,6 @@
 <script src="/static/js/dash/13-watchlist.js"></script>
 <script src="/static/js/dash/14-campaigns.js"></script>
 <script src="/static/js/dash/15-syslog.js"></script>
+<script src="/static/js/dash/16-honeypot.js"></script>
 </body>
 </html>

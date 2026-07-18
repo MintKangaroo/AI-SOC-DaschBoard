@@ -36,6 +36,12 @@ class Config:
     SYSLOG_BIND = os.getenv("SYSLOG_BIND", "127.0.0.1")    # 바인드 주소(로컬만: 127.0.0.1)
     SYSLOG_PORT = int(os.getenv("SYSLOG_PORT", 5514))       # 비특권 포트(514는 sudo 필요)
 
+    # 허니팟 (유인 서비스로 침해시도 능동 포착)
+    HONEYPOT_ENABLED = os.getenv("HONEYPOT_ENABLED", "True")
+    HONEYPOT_BIND = os.getenv("HONEYPOT_BIND", "127.0.0.1")   # 실포착은 0.0.0.0+외부노출
+    HONEYPOT_PORTS = os.getenv("HONEYPOT_PORTS", "")           # "2222,2323,3306,6379,8081,9200"
+    HONEYPOT_COOLDOWN = float(os.getenv("HONEYPOT_COOLDOWN", 30))  # 동일 IP 재알림 간격(초)
+
     # SSH 인증 로그 실시간 탐지
     AUTH_LOG_PATH = os.getenv("AUTH_LOG_PATH", "/var/log/auth.log")
     SSH_BRUTE_THRESHOLD = int(os.getenv("SSH_BRUTE_THRESHOLD", 5))   # 실패 횟수
