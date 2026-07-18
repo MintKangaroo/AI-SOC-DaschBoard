@@ -89,6 +89,7 @@ class ThreatDetector:
         self.ip_reputation = None  # app.py 에서 주입 (AbuseIPDB 평판 신뢰도 가중)
         self.soar = None           # app.py 에서 주입 (자동 대응 플레이북)
         self.decision = None       # app.py 에서 주입 (ML 의사결정 지원)
+        self.watchlist = None      # wiring 에서 주입 (IOC 워치리스트 대조)
         self.running = False
 
         # 정탐 신뢰도 임계값 — 미만이면 '오탐 의심'으로 저장만 하고 emit 억제
@@ -428,6 +429,15 @@ class ThreatDetector:
         low_conf = alert.confidence < self.min_confidence
         if low_conf:
             alert.details["low_confidence"] = True
+
+        # IOC 워치리스트 대조: 분석가가 주시 중인 지표면 알림에 표식
+        if self.watchlist:
+            try:
+                wl_hits = self.watchlist.match_alert(alert.src_ip, alert.dst_ip)
+                if wl_hits:
+                    alert.details["watchlist"] = wl_hits
+            except Exception:
+                pass
 
         # 의사결정 지원: 모든 알림(오탐 의심 포함)을 위협 그룹에 반영
         if self.decision:

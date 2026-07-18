@@ -1,7 +1,7 @@
 """위협 분석: AI · ML · MITRE · 위협 인텔리전스
    (api_bp 공유 — api/routes.py 가 임포트해 라우트를 등록한다)"""
 from flask import request, jsonify, current_app
-from api._common import api_bp, get_services, _mitre, _hash_scan_allowed
+from api._common import api_bp, get_services, _mitre, _hash_scan_allowed, audit_record, _actor
 
 
 # ------------------------------------------------------------------ #
@@ -142,3 +142,45 @@ def ti_refresh():
     import threading as _t
     _t.Thread(target=ti._refresh_feeds, daemon=True).start()
     return jsonify({"ok": True, "message": "피드 갱신 요청됨"})
+
+
+# ------------------------------------------------------------------ #
+#  IOC 워치리스트 (능동 헌팅)
+# ------------------------------------------------------------------ #
+
+@api_bp.route("/watchlist", methods=["GET"])
+def watchlist_list():
+    wl = current_app._get_current_object().watchlist
+    items, stats = wl.list_all()
+    return jsonify({"items": items, "stats": stats})
+
+
+@api_bp.route("/watchlist", methods=["POST"])
+def watchlist_add():
+    wl = current_app._get_current_object().watchlist
+    data = request.get_json() or {}
+    res = wl.add(data.get("type"), data.get("value"),
+                 note=data.get("note", ""), added_by=_actor())
+    if res.get("ok"):
+        audit_record("WATCHLIST_ADD",
+                     target=f"{data.get('type')}:{data.get('value')}",
+                     detail=data.get("note", ""))
+        return jsonify({"success": True})
+    return jsonify({"success": False, "error": res.get("error")}), 400
+
+
+@api_bp.route("/watchlist/<int:ioc_id>", methods=["DELETE"])
+def watchlist_remove(ioc_id):
+    wl = current_app._get_current_object().watchlist
+    value = wl.get(ioc_id)
+    ok = wl.remove(ioc_id)
+    if ok:
+        audit_record("WATCHLIST_REMOVE", target=value or f"#{ioc_id}")
+    return jsonify({"success": ok})
+
+
+@api_bp.route("/watchlist/check", methods=["POST"])
+def watchlist_check():
+    wl = current_app._get_current_object().watchlist
+    value = (request.get_json() or {}).get("value", "").strip()
+    return jsonify({"value": value, "type": wl.match(value)})

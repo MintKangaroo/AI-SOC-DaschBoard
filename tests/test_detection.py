@@ -1056,3 +1056,35 @@ def test_purple_uses_testnet_ip(tmp_path):
 def test_purple_unknown_scenario(tmp_path):
     p = _make_purple(tmp_path)
     assert "error" in p.run_scenario("nope")
+
+
+# ─────────────────── IOC 워치리스트 ───────────────────
+
+from modules.watchlist import Watchlist
+
+
+def test_watchlist_crud_and_match(tmp_path):
+    wl = Watchlist(socketio=FakeSocketIO(), db_path=str(tmp_path / "w.db"))
+    assert wl.add("ip", "9.9.9.9", note="테스트", added_by="kim")["ok"]
+    assert not wl.add("ip", "9.9.9.9")["ok"]           # 중복 거부
+    assert not wl.add("bad", "x")["ok"]                # 잘못된 유형
+    assert wl.match("9.9.9.9") == "ip"
+    assert wl.match("1.1.1.1") is None
+    items, stats = wl.list_all()
+    assert stats["total"] == 1 and stats["by_type"]["ip"] == 1
+    wl.close()
+
+
+def test_watchlist_hit_via_add_alert(tmp_path):
+    """워치리스트에 올린 IP 가 알림에 등장하면 히트 집계 + details 표식."""
+    wl = Watchlist(socketio=FakeSocketIO(), db_path=str(tmp_path / "w.db"))
+    wl.add("ip", "5.5.5.5", added_by="kim")
+    td = ThreatDetector(FakeSocketIO(), config={}, store_path=str(tmp_path / "a.db"))
+    td.watchlist = wl
+    td.report_alert("PORT_SCAN", "HIGH", "5.5.5.5", "10.0.0.1", "워치 IP 스캔")
+    alert = td.get_alerts()[0]
+    assert "watchlist" in alert["details"]
+    assert alert["details"]["watchlist"][0]["value"] == "5.5.5.5"
+    items, stats = wl.list_all()
+    assert items[0]["hits"] == 1 and stats["hit_total"] == 1
+    td.store.close(); wl.close()

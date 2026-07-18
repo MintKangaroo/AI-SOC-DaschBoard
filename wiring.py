@@ -29,6 +29,7 @@ from modules.decision_support import DecisionSupport
 from modules.incidents import IncidentManager
 from modules.authlog_parser import AuthLogMonitor
 from modules.audit_log import AuditLog
+from modules.watchlist import Watchlist
 
 
 def build_services(app, socketio):
@@ -119,8 +120,13 @@ def build_services(app, socketio):
     # 전역 감사 로그 (분석가 조치 기록)
     audit = AuditLog(app.config.get("AUDIT_DB", "data/audit.db"))
 
+    # IOC 워치리스트 (능동 헌팅) → 알림 파이프라인에서 대조
+    watchlist = Watchlist(socketio, app.config.get("WATCHLIST_DB", "data/watchlist.db"))
+    threat_detector.watchlist = watchlist
+
     # app 컨텍스트에 서비스 등록
     app.audit           = audit
+    app.watchlist       = watchlist
     app.packet_analyzer = packet_analyzer
     app.threat_detector = threat_detector
     app.sysmon_parser   = sysmon_parser

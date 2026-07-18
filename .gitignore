@@ -8,3 +8,4 @@ data/alerts.db
 data/reports/
 data/*.log
 data/audit.db
+data/watchlist.db
