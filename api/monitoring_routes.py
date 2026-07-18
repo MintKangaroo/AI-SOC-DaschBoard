@@ -103,6 +103,28 @@ def authlog_status():
 
 
 # ------------------------------------------------------------------ #
+#  Syslog 수신 (원격 침해시도 수집)
+# ------------------------------------------------------------------ #
+
+@api_bp.route("/integrations/syslog", methods=["GET"])
+def syslog_status():
+    recv = getattr(current_app._get_current_object(), "syslog_receiver", None)
+    if recv is None:
+        return jsonify({"stats": {}, "config": {}, "events": []})
+    return jsonify(recv.get_status())
+
+
+@api_bp.route("/integrations/syslog/events", methods=["GET"])
+def syslog_events():
+    recv = current_app._get_current_object().syslog_receiver
+    limit = int(request.args.get("limit", 100))
+    source = request.args.get("source")
+    suspicious = request.args.get("suspicious") in ("1", "true", "yes")
+    return jsonify({"events": recv.get_events(limit=limit, source=source,
+                                              suspicious_only=suspicious)})
+
+
+# ------------------------------------------------------------------ #
 #  IP 평판 조회 (AbuseIPDB)
 # ------------------------------------------------------------------ #
 

@@ -20,6 +20,7 @@ SPECS = [
     ("edr",             "EDR 센서",         "수집·탐지"),
     ("net_monitor",     "네트워크 관제",    "수집·탐지"),
     ("siem_collector",  "SIEM 수집기",      "수집·탐지"),
+    ("syslog_receiver", "Syslog 수신기",    "수집·탐지"),
     ("authlog",         "SSH 인증 로그",    "수집·탐지"),
     # 위협 분석
     ("ml_analyst",      "ML 분석 엔진",     "위협 분석"),
@@ -107,6 +108,7 @@ def _extract_detail(key, eff, status):
         "edr":             ("탐지", g(s, "detections")),
         "net_monitor":     ("악성 연결", g(s, "malicious_conns")),
         "siem_collector":  ("이벤트", g(s, "total_events")),
+        "syslog_receiver": ("수신", g(s, "received")),
         "authlog":         ("실패 시도", g(s, "failed")),
         "ml_analyst":      ("IF 이상탐지", g(s, "if_anomalies")),
         "ai_analyst":      ("분석", g(st, "total_analyses")),

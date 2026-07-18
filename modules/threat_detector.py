@@ -34,6 +34,7 @@ THREAT_TYPES = {
     "EDR_THREAT": "EDR 엔드포인트 위협",
     "NETWORK_ANOMALY": "네트워크 이상",
     "SIGMA_MATCH": "Sigma 룰 탐지",
+    "WEB_ATTACK": "웹 공격 (SQLi/XSS 등)",
 }
 
 

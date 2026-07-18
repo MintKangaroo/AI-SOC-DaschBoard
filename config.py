@@ -31,6 +31,11 @@ class Config:
     # SIEM 접근 로그 소스 — "이름=경로;이름=경로" (비우면 기본 자동매매 KR/USA 로그)
     SIEM_ACCESS_LOGS = os.getenv("SIEM_ACCESS_LOGS", "")
 
+    # Syslog 수신 (원격 침해시도 수집) — KR/USA 등이 syslog 로 전송
+    SYSLOG_ENABLED = os.getenv("SYSLOG_ENABLED", "True")   # 수신기 활성 여부
+    SYSLOG_BIND = os.getenv("SYSLOG_BIND", "127.0.0.1")    # 바인드 주소(로컬만: 127.0.0.1)
+    SYSLOG_PORT = int(os.getenv("SYSLOG_PORT", 5514))       # 비특권 포트(514는 sudo 필요)
+
     # SSH 인증 로그 실시간 탐지
     AUTH_LOG_PATH = os.getenv("AUTH_LOG_PATH", "/var/log/auth.log")
     SSH_BRUTE_THRESHOLD = int(os.getenv("SSH_BRUTE_THRESHOLD", 5))   # 실패 횟수

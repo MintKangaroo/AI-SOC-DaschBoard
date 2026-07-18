@@ -113,6 +113,7 @@ function showPanel(name) {
   if (name === 'campaigns') loadCampaigns();
   if (name === 'threat-intel') loadThreatIntel();
   if (name === 'siem') loadSiem();
+  if (name === 'syslog') loadSyslog();
   if (name === 'authlog') loadAuthlog();
   if (name === 'reputation') loadReputation();
   if (name === 'edr') loadEdr();

@@ -28,6 +28,7 @@ from modules.soar import SOAREngine
 from modules.decision_support import DecisionSupport
 from modules.incidents import IncidentManager
 from modules.authlog_parser import AuthLogMonitor
+from modules.syslog_receiver import SyslogReceiver
 from modules.audit_log import AuditLog
 from modules.watchlist import Watchlist
 
@@ -77,6 +78,11 @@ def build_services(app, socketio):
 
     # 실제 SSH 인증 로그 감시 (auth.log) → BRUTE_FORCE 를 파이프라인에 주입
     authlog = AuthLogMonitor(socketio, app.config, threat_detector=threat_detector)
+
+    # Syslog 수신 (KR/USA 원격 침해시도) → 접속시도/공격을 파이프라인에 주입
+    syslog_receiver = SyslogReceiver(socketio, app.config,
+                                     threat_detector=threat_detector,
+                                     mitre_tracker=mitre_tracker, attack_map=attack_map)
 
     # Sigma 룰 엔진 (업계 표준 탐지룰) → EDR 프로세스 이벤트를 표준룰로 평가
     sigma = SigmaEngine(socketio, app.config, threat_detector=threat_detector,
@@ -138,6 +144,7 @@ def build_services(app, socketio):
     app.threat_intel    = threat_intel
     app.ip_reputation   = ip_reputation
     app.siem_collector  = siem_collector
+    app.syslog_receiver = syslog_receiver
     app.soar            = soar
     app.decision_support = decision
     app.incidents        = incidents
@@ -170,6 +177,7 @@ def start_services(app, socketio):
     app.siem_collector.start(demo=demo)
     app.soar.start(demo=demo)
     app.authlog.start(demo=demo)      # auth.log 있으면 실모드, 없으면 데모
+    app.syslog_receiver.start(demo=demo)  # udp/tcp 5514 수신, 바인딩 실패 시 데모
     app.sigma.start(demo=demo)        # Sigma 룰 로드 (EDR 보다 먼저)
     app.edr.start(demo=demo)          # psutil 있으면 실센서, 없으면 데모
     app.net_monitor.start(demo=demo)

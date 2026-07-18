@@ -614,3 +614,86 @@ def test_correlation_time_window_splits():
     ]
     camps = correlation.build_campaigns(rows, window_minutes=30, min_alerts=2)
     assert len(camps) == 1 and camps[0]["alert_count"] == 2
+
+
+# ══════════════════════ Syslog 수신기 ══════════════════════
+import time as _time
+import socket as _socket
+from modules.syslog_receiver import SyslogReceiver, classify_syslog
+
+
+class _FakeTD:
+    def __init__(self):
+        self.alerts = []
+
+    def report_alert(self, ttype, sev, src, dst, desc, details=None):
+        self.alerts.append((ttype, sev, src, dst, details or {}))
+
+
+def test_syslog_classify_access_and_keywords():
+    # werkzeug 접근 라인 → access 분류 재사용 + 출발지 IP 추출
+    susp, sev, cat, ip = classify_syslog(
+        '203.0.113.5 - - [06/Jun/2026 20:52:29] "PRI * HTTP/2.0" 505 -')
+    assert susp and sev == "HIGH" and ip == "203.0.113.5"
+    # 보안 키워드
+    susp, sev, cat, ip = classify_syslog(
+        "sshd: Failed password for invalid user root from 9.9.9.9 port 22")
+    assert susp and cat == "인증 실패/무차별 대입" and ip == "9.9.9.9"
+    susp, sev, cat, ip = classify_syslog("app: health check ok")
+    assert not susp and sev == "INFO"
+
+
+def test_syslog_parse_rfc3164_and_5424():
+    rx = SyslogReceiver(FakeSocketIO(), {"SYSLOG_ENABLED": "False"})
+    # RFC3164
+    fac, sev, host, tag, msg = rx._parse(
+        "<134>Jul 18 14:00:00 kr-trader sshd: Failed password from 1.2.3.4")
+    assert host == "kr-trader" and tag == "sshd" and "Failed password" in msg
+    # RFC5424
+    fac, sev, host, tag, msg = rx._parse(
+        "<134>1 2026-07-18T14:00:00Z usa-trader waf 1234 ID1 - blocked scan from 5.6.7.8")
+    assert host == "usa-trader" and tag == "waf" and "blocked scan" in msg
+
+
+def test_syslog_suspicious_feeds_threat_detector():
+    """의심 + 외부 IP → report_alert 로 파이프라인 주입 (매핑된 위협 유형)."""
+    td = _FakeTD()
+    rx = SyslogReceiver(FakeSocketIO(), {"SYSLOG_ENABLED": "False"}, threat_detector=td)
+    rx._handle("<134>Jul 18 14:00:00 kr-trader waf: SQL injection UNION SELECT from 198.51.100.9",
+               peer="198.51.100.9", transport="udp")
+    assert len(td.alerts) == 1
+    assert td.alerts[0][0] == "WEB_ATTACK" and td.alerts[0][2] == "198.51.100.9"
+    assert td.alerts[0][4]["source"] == "syslog"
+
+
+def test_syslog_internal_ip_not_escalated():
+    """내부 IP 의심 이벤트는 파이프라인에 올리지 않는다 (오탐 억제)."""
+    td = _FakeTD()
+    rx = SyslogReceiver(FakeSocketIO(), {"SYSLOG_ENABLED": "False"}, threat_detector=td)
+    rx._handle("<134>Jul 18 14:00:00 kr sshd: Failed password from 192.168.1.10",
+               peer="192.168.1.10", transport="udp")
+    assert td.alerts == []
+
+
+def test_syslog_udp_tcp_roundtrip():
+    """실제 UDP/TCP 소켓 수신 왕복."""
+    sio = FakeSocketIO()
+    rx = SyslogReceiver(sio, {"SYSLOG_ENABLED": "True", "SYSLOG_BIND": "127.0.0.1",
+                              "SYSLOG_PORT": 15517})
+    rx.start(demo=False)
+    _time.sleep(0.3)
+    assert rx.get_stats()["mode"] == "real"
+    u = _socket.socket(_socket.AF_INET, _socket.SOCK_DGRAM)
+    u.sendto(b"<134>Jul 18 14:00:00 kr-trader app: hello from 203.0.113.1\n",
+             ("127.0.0.1", 15517))
+    t = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+    t.connect(("127.0.0.1", 15517))
+    t.sendall(b"<134>Jul 18 14:00:01 usa-trader app: hi from 203.0.113.2\n")
+    t.close()
+    _time.sleep(0.5)
+    try:
+        hosts = {e["host"] for e in rx.get_events()}
+        assert "kr-trader" in hosts and "usa-trader" in hosts
+        assert rx.get_stats()["received"] >= 2
+    finally:
+        rx.stop()
