@@ -210,6 +210,7 @@ SOC_DashBoard/
 
 ## 문서
 
+- 📸 **[포트폴리오 (화면 소개)](docs/PORTFOLIO.md)** — 스크린샷으로 보는 대시보드·기술 소개
 - [아키텍처](docs/architecture.md) · [모듈 상세](docs/modules.md) · [연동 가이드](docs/integrations.md)
 - [탐지 규칙](docs/detection_rules.md) · [MITRE ATT&CK](docs/mitre_attack.md) · [AI 모델](docs/ml_models.md)
 
