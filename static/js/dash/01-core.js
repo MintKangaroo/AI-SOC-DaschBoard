@@ -111,6 +111,7 @@ function showPanel(name) {
   if (name === 'ml') { setTimeout(initMLCharts, 50); loadDecisionSupport(); }
   if (name === 'mitre') loadMitreMatrix();
   if (name === 'campaigns') loadCampaigns();
+  if (name === 'siem-correlation') loadSiemCorrelation();
   if (name === 'threat-intel') loadThreatIntel();
   if (name === 'siem') loadSiem();
   if (name === 'syslog') loadSyslog();

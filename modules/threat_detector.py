@@ -36,6 +36,7 @@ THREAT_TYPES = {
     "SIGMA_MATCH": "Sigma 룰 탐지",
     "WEB_ATTACK": "웹 공격 (SQLi/XSS 등)",
     "HONEYPOT": "허니팟 유인 탐지",
+    "CORRELATED": "SIEM 상관관계 탐지",
 }
 
 
@@ -92,6 +93,7 @@ class ThreatDetector:
         self.soar = None           # app.py 에서 주입 (자동 대응 플레이북)
         self.decision = None       # app.py 에서 주입 (ML 의사결정 지원)
         self.watchlist = None      # wiring 에서 주입 (IOC 워치리스트 대조)
+        self.siem_correlator = None  # wiring 에서 주입 (SIEM 상관관계 분석)
         self.running = False
 
         # 정탐 신뢰도 임계값 — 미만이면 '오탐 의심'으로 저장만 하고 emit 억제
@@ -504,6 +506,13 @@ class ThreatDetector:
         if self.soar:
             try:
                 self.soar.handle_alert(alert.to_dict())
+            except Exception:
+                pass
+
+        # SIEM 상관관계 분석 (CORRELATED 자신은 재투입 금지 → 무한루프 방지)
+        if self.siem_correlator and alert.threat_type != "CORRELATED":
+            try:
+                self.siem_correlator.feed(alert.to_dict())
             except Exception:
                 pass
 

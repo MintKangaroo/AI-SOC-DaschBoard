@@ -772,3 +772,57 @@ def test_honeypot_real_listener_roundtrip():
 
 def test_honeypot_sanitize_control_chars():
     assert _sanitize("a\x00b\x1fc") == "a\\x00b\\x1fc"
+
+
+# ══════════════════════ SIEM 상관관계 분석 ══════════════════════
+from modules.siem_correlation import SIEMCorrelator
+
+
+def _mk_corr(td=None, **cfg):
+    base = {"SIEM_CORR_MULTIVECTOR": 3, "SIEM_CORR_BRUTE": 5, "SIEM_CORR_DISTRIBUTED": 6}
+    base.update(cfg)
+    sc = SIEMCorrelator(FakeSocketIO(), base, threat_detector=td)
+    sc.start(demo=False)
+    return sc
+
+
+def test_corr_recon_then_intrusion():
+    td = _FakeTD()
+    sc = _mk_corr(td)
+    sc.feed({"src_ip": "203.0.113.9", "threat_type": "PORT_SCAN", "severity": "HIGH"})
+    sc.feed({"src_ip": "203.0.113.9", "threat_type": "HONEYPOT", "severity": "CRITICAL"})
+    rules = {f["rule"] for f in sc.findings}
+    assert "R-RECON-INTRUSION" in rules
+    assert any(a[0] == "CORRELATED" for a in td.alerts)
+
+
+def test_corr_multi_vector():
+    sc = _mk_corr()
+    for t in ("PORT_SCAN", "BRUTE_FORCE", "WEB_ATTACK"):
+        sc.feed({"src_ip": "9.9.9.9", "threat_type": t, "severity": "HIGH"})
+    assert any(f["rule"] == "R-MULTI-VECTOR" for f in sc.findings)
+
+
+def test_corr_sustained_brute():
+    sc = _mk_corr()
+    for _ in range(5):
+        sc.feed({"src_ip": "8.8.8.8", "threat_type": "BRUTE_FORCE", "severity": "HIGH"})
+    assert any(f["rule"] == "R-SUSTAINED-BRUTE" for f in sc.findings)
+
+
+def test_corr_distributed():
+    sc = _mk_corr()
+    for i in range(6):
+        sc.feed({"src_ip": f"1.2.3.{i}", "threat_type": "PORT_SCAN", "severity": "HIGH"})
+    dist = [f for f in sc.findings if f["rule"] == "R-DISTRIBUTED"]
+    assert dist and dist[0]["count"] >= 6
+
+
+def test_corr_cooldown_dedup():
+    td = _FakeTD()
+    sc = _mk_corr(td, SIEM_CORR_COOLDOWN=999)
+    for _ in range(3):
+        sc.feed({"src_ip": "7.7.7.7", "threat_type": "PORT_SCAN", "severity": "HIGH"})
+        sc.feed({"src_ip": "7.7.7.7", "threat_type": "HONEYPOT", "severity": "CRITICAL"})
+    fired = [f for f in sc.findings if f["rule"] == "R-RECON-INTRUSION"]
+    assert len(fired) == 1  # 쿨다운으로 1회만

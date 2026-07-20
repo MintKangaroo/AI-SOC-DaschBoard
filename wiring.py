@@ -30,6 +30,7 @@ from modules.incidents import IncidentManager
 from modules.authlog_parser import AuthLogMonitor
 from modules.syslog_receiver import SyslogReceiver
 from modules.honeypot import Honeypot
+from modules.siem_correlation import SIEMCorrelator
 from modules.audit_log import AuditLog
 from modules.watchlist import Watchlist
 
@@ -88,6 +89,10 @@ def build_services(app, socketio):
     # 허니팟 (유인 서비스) → 접촉 자체가 고신뢰 침해지표 → 파이프라인 주입
     honeypot = Honeypot(socketio, app.config, threat_detector=threat_detector,
                         mitre_tracker=mitre_tracker, attack_map=attack_map)
+
+    # SIEM 상관관계 분석 → 알림 스트림을 규칙으로 엮어 CORRELATED 상관 탐지 발화
+    siem_correlator = SIEMCorrelator(socketio, app.config, threat_detector=threat_detector)
+    threat_detector.siem_correlator = siem_correlator
 
     # Sigma 룰 엔진 (업계 표준 탐지룰) → EDR 프로세스 이벤트를 표준룰로 평가
     sigma = SigmaEngine(socketio, app.config, threat_detector=threat_detector,
@@ -151,6 +156,7 @@ def build_services(app, socketio):
     app.siem_collector  = siem_collector
     app.syslog_receiver = syslog_receiver
     app.honeypot        = honeypot
+    app.siem_correlator = siem_correlator
     app.soar            = soar
     app.decision_support = decision
     app.incidents        = incidents
@@ -185,6 +191,7 @@ def start_services(app, socketio):
     app.authlog.start(demo=demo)      # auth.log 있으면 실모드, 없으면 데모
     app.syslog_receiver.start(demo=demo)  # udp/tcp 5514 수신, 바인딩 실패 시 데모
     app.honeypot.start(demo=demo)         # 유인 서비스 리스너, 바인딩 실패 시 데모
+    app.siem_correlator.start(demo=demo)  # 알림 스트림 상관관계 분석(항상 실동작)
     app.sigma.start(demo=demo)        # Sigma 룰 로드 (EDR 보다 먼저)
     app.edr.start(demo=demo)          # psutil 있으면 실센서, 없으면 데모
     app.net_monitor.start(demo=demo)

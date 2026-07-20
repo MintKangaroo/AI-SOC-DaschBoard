@@ -119,6 +119,10 @@
       <a href="#campaigns" class="sidebar-link" data-panel="campaigns">
         <i class="fa fa-diagram-project"></i><span>공격 캠페인 (킬체인)</span>
       </a>
+      <a href="#siem-correlation" class="sidebar-link" data-panel="siem-correlation">
+        <i class="fa fa-link"></i><span>SIEM 상관관계</span>
+        <span class="badge bg-secondary ms-auto" id="sidebar-corr-count">0</span>
+      </a>
       <a href="#sigma" class="sidebar-link" data-panel="sigma">
         <i class="fa fa-file-shield"></i><span>Sigma 룰 엔진</span>
         <span class="badge bg-secondary ms-auto" id="sidebar-sigma-count">0</span>
@@ -212,6 +216,7 @@
     {% include "panels/ml.html" %}
     {% include "panels/mitre.html" %}
     {% include "panels/campaigns.html" %}
+    {% include "panels/siem-correlation.html" %}
     {% include "panels/threat-intel.html" %}
     {% include "panels/edr.html" %}
     {% include "panels/network.html" %}
@@ -266,5 +271,6 @@
 <script src="/static/js/dash/14-campaigns.js"></script>
 <script src="/static/js/dash/15-syslog.js"></script>
 <script src="/static/js/dash/16-honeypot.js"></script>
+<script src="/static/js/dash/17-siem-correlation.js"></script>
 </body>
 </html>

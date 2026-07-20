@@ -32,6 +32,7 @@ SPECS = [
     ("sigma",           "Sigma 룰 엔진",    "위협 분석"),
     ("decision_support","ML 의사결정 지원", "위협 분석"),
     ("watchlist",       "IOC 워치리스트",   "위협 분석"),
+    ("siem_correlator", "SIEM 상관관계",    "위협 분석"),
     # 대응
     ("soar",            "SOAR 자동대응",    "대응"),
     ("incidents",       "인시던트 관리",    "대응"),
@@ -51,7 +52,7 @@ SPECS = [
 # 모드 개념이 없는(항상 실동작) 라이브러리성 모듈
 _LIVE_MODULES = {"threat_detector", "sysmon_parser", "mitre_tracker",
                  "decision_support", "incidents", "hash_checker", "sigma", "audit",
-                 "watchlist"}
+                 "watchlist", "siem_correlator"}
 
 
 def _safe(fn, default=None):

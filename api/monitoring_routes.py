@@ -137,6 +137,18 @@ def honeypot_status():
 
 
 # ------------------------------------------------------------------ #
+#  SIEM 상관관계 분석
+# ------------------------------------------------------------------ #
+
+@api_bp.route("/siem/correlation", methods=["GET"])
+def siem_correlation_status():
+    sc = getattr(current_app._get_current_object(), "siem_correlator", None)
+    if sc is None:
+        return jsonify({"stats": {}, "rules": [], "findings": []})
+    return jsonify(sc.get_status())
+
+
+# ------------------------------------------------------------------ #
 #  IP 평판 조회 (AbuseIPDB)
 # ------------------------------------------------------------------ #
 
