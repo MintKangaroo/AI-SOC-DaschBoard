@@ -260,6 +260,36 @@ class AlertStore:
         return {"live": live, "archived": arch, "oldest": oldest,
                 "newest": newest, "archived_newest": arch_newest}
 
+    def retention_preview(self, live_days=90, archive_days=365):
+        """정리 실행 전 이동/영구삭제 예정 건수를 변경 없이 조회한다."""
+        with self._lock:
+            self._ensure_archive()
+            to_archive = self._conn.execute(
+                "SELECT COUNT(*) FROM alerts WHERE timestamp < datetime('now', ?, 'localtime')",
+                (f"-{int(live_days)} days",)).fetchone()[0]
+            to_delete = self._conn.execute(
+                """SELECT COUNT(*) FROM alerts_archive
+                   WHERE COALESCE(archived_at, timestamp) < datetime('now', ?, 'localtime')""",
+                (f"-{int(archive_days)} days",)).fetchone()[0]
+        return {"to_archive": to_archive, "archive_to_delete": to_delete}
+
+    def purge_archive_older_than(self, days):
+        """아카이브된 뒤 N일이 지난 항목만 영구 삭제한다. 활성 알림은 건드리지 않는다."""
+        with self._lock:
+            self._ensure_archive()
+            arg = f"-{int(days)} days"
+            count = self._conn.execute(
+                """SELECT COUNT(*) FROM alerts_archive
+                   WHERE COALESCE(archived_at, timestamp) < datetime('now', ?, 'localtime')""",
+                (arg,)).fetchone()[0]
+            if count:
+                self._conn.execute(
+                    """DELETE FROM alerts_archive
+                       WHERE COALESCE(archived_at, timestamp) < datetime('now', ?, 'localtime')""",
+                    (arg,))
+                self._conn.commit()
+        return count
+
     def archive_older_than(self, days):
         """N일 이전 알림을 아카이브 테이블로 이동(무손실). 이동 건수 반환."""
         from datetime import datetime

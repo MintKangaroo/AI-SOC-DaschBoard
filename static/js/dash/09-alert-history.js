@@ -4,6 +4,21 @@ let _ahPage = 1;
 let _ahPages = 1;
 let _ahTypesLoaded = false;
 
+function _ensureAlertHistoryTypes() {
+  if (_ahTypesLoaded) return Promise.resolve();
+  return fetch('/api/alerts/history?limit=1').then(r => r.json()).then(d => {
+    const sel = document.getElementById('ah-type');
+    if (sel && d.labels) {
+      Object.entries(d.labels).forEach(([k, v]) => {
+        if (sel.querySelector(`option[value="${CSS.escape(k)}"]`)) return;
+        const o = document.createElement('option');
+        o.value = k; o.textContent = v; sel.appendChild(o);
+      });
+    }
+    _ahTypesLoaded = true;
+  });
+}
+
 /* 현재 필터 → 쿼리스트링 */
 function _ahParams() {
   const p = new URLSearchParams();
@@ -20,23 +35,18 @@ function _ahParams() {
 
 /* 패널 최초 진입: 위협 유형 옵션 채우고 1페이지 검색 */
 function loadAlertHistory() {
-  if (!_ahTypesLoaded) {
-    fetch('/api/alerts/history?limit=1')
-      .then(r => r.json())
-      .then(d => {
-        const sel = document.getElementById('ah-type');
-        if (sel && d.labels) {
-          Object.entries(d.labels).forEach(([k, v]) => {
-            const o = document.createElement('option');
-            o.value = k; o.textContent = v;
-            sel.appendChild(o);
-          });
-        }
-        _ahTypesLoaded = true;
-      })
-      .catch(() => {});
-  }
-  searchAlertHistory(1);
+  _ensureAlertHistoryTypes().then(() => searchAlertHistory(1)).catch(() => searchAlertHistory(1));
+}
+
+function openAlertGroup(srcIp, threatType) {
+  showPanel('alert-history');
+  _ensureAlertHistoryTypes().then(() => {
+    const ip = document.getElementById('ah-ip');
+    const type = document.getElementById('ah-type');
+    if (ip) ip.value = srcIp || '';
+    if (type) type.value = threatType || '';
+    searchAlertHistory(1);
+  }).catch(() => {});
 }
 
 function searchAlertHistory(page) {

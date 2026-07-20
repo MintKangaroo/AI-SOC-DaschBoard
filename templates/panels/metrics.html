@@ -48,8 +48,16 @@
           <div class="col-6 col-md">활성 알림 <span class="fw-bold text-cyan" id="mr-live">-</span></div>
           <div class="col-6 col-md">아카이브 <span class="fw-bold text-muted" id="mr-archived">-</span></div>
           <div class="col-6 col-md">최고(古) <span class="font-monospace text-muted" id="mr-oldest">-</span></div>
-          <div class="col-6 col-md">보존기간 <span class="fw-bold" id="mr-days">-</span>일</div>
+          <div class="col-6 col-md">활성→아카이브 <span class="fw-bold" id="mr-days">-</span>일</div>
+          <div class="col-6 col-md">아카이브 보존 <span class="fw-bold" id="mr-archive-days">-</span>일</div>
+          <div class="col-6 col-md">감사 보존 <span class="fw-bold" id="mr-audit-days">-</span>일</div>
+          <div class="col-6 col-md">파일 보존 <span class="fw-bold" id="mr-file-days">-</span>일</div>
         </div>
+        <div class="small mt-2 p-2 rounded" style="background:rgba(227,179,65,.08)">
+          실행 미리보기: <strong class="text-cyan" id="mr-preview-archive">0</strong>건 아카이브 ·
+          <strong class="text-warning" id="mr-preview-delete">0</strong>건 영구삭제
+        </div>
+        <div class="small text-muted mt-2" id="mr-history">아직 실행 이력 없음</div>
         <div id="mr-msg" class="small mt-2"></div>
       </div>
 

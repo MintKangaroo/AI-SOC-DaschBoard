@@ -573,6 +573,29 @@ def test_alert_archive_moves_old(tmp_path):
     store.close()
 
 
+def test_retention_deletes_only_expired_archive(tmp_path):
+    store = AlertStore(str(tmp_path / "safe-retention.db"))
+    from datetime import datetime, timedelta
+    old = _MAlert("DDOS", "HIGH", "1.1.1.1", "2.2.2.2", "old")
+    old.timestamp = (datetime.now() - timedelta(days=100)).strftime("%Y-%m-%d %H:%M:%S")
+    recent = _MAlert("PORT_SCAN", "HIGH", "3.3.3.3", "4.4.4.4", "recent")
+    store.save(old); store.save(recent)
+
+    assert store.retention_preview(90, 365)["to_archive"] == 1
+    assert store.archive_older_than(90) == 1
+    # 아카이브 직후에는 원본 이벤트 시각이 오래돼도 삭제하지 않는다.
+    assert store.purge_archive_older_than(365) == 0
+    assert store.retention_stats()["live"] == 1
+    with store._lock:
+        store._conn.execute("UPDATE alerts_archive SET archived_at='2020-01-01 00:00:00'")
+        store._conn.commit()
+    assert store.retention_preview(90, 365)["archive_to_delete"] == 1
+    assert store.purge_archive_older_than(365) == 1
+    # 활성 최근 알림은 영구삭제 경로의 영향을 받지 않는다.
+    assert store.retention_stats()["live"] == 1
+    store.close()
+
+
 # ─────────────────── 킬체인 상관관계 ───────────────────
 
 from modules import correlation

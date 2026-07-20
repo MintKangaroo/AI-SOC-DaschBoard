@@ -126,16 +126,32 @@ def alerts_history_export():
 
 @api_bp.route("/alerts/retention", methods=["GET"])
 def alerts_retention():
-    """알림 보존 현황 (활성/아카이브 건수, 최고古 시각, 보존기간)."""
+    """계층별 보존 현황과 변경 없는 정리 미리보기."""
     app = current_app._get_current_object()
+    from modules import retention
     store = getattr(app.threat_detector, "store", None)
-    days = app.config.get("ALERT_RETENTION_DAYS", 90)
     if store is None:
-        return jsonify({"live": 0, "archived": 0, "retention_days": days})
+        return jsonify({"live": 0, "archived": 0, **retention.status(app)})
     out = store.retention_stats()
-    out["retention_days"] = days
-    out["auto_archive"] = app.config.get("ALERT_AUTO_ARCHIVE", False)
+    out.update(retention.status(app))
     return jsonify(out)
+
+
+@api_bp.route("/alerts/retention/run", methods=["POST"])
+def retention_run():
+    """미리보기 후 수동 정리. 대량 영구삭제는 명시 확인이 있어야 실행한다."""
+    from modules import retention
+    app = current_app._get_current_object()
+    before = retention.preview(app)
+    data = request.get_json(silent=True) or {}
+    if before["destructive_total"] > 1000 and not data.get("confirm_large"):
+        return jsonify({"success": False, "requires_confirmation": True,
+                        "error": "영구삭제 대상이 1,000건을 초과합니다", **before}), 409
+    result = retention.run_cleanup(app, manual=True)
+    audit_record("RETENTION_RUN", target="보존 정책 수동 실행",
+                 detail=f"아카이브 {result['archived']} · 영구삭제 "
+                        f"{result['archive_deleted'] + result['audit_deleted'] + result['files_deleted']}")
+    return jsonify({"success": True, "result": result, **retention.status(app)})
 
 
 @api_bp.route("/alerts/archive", methods=["POST"])

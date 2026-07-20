@@ -21,6 +21,7 @@ ACTIONS = {
     "WATCHLIST_ADD":   "워치리스트 추가",
     "WATCHLIST_REMOVE":"워치리스트 삭제",
     "ALERT_ARCHIVE":   "알림 아카이브",
+    "RETENTION_RUN":   "보존 정책 수동 실행",
 }
 
 
@@ -98,6 +99,12 @@ class AuditLog:
             return cnt
         except Exception:
             return 0
+
+    def count_older_than(self, days):
+        with self._lock:
+            return self._conn.execute(
+                "SELECT COUNT(*) FROM audit WHERE ts < datetime('now', ?, 'localtime')",
+                (f"-{int(days)} days",)).fetchone()[0]
 
     def labels(self):
         return dict(ACTIONS)

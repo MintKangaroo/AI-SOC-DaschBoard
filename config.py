@@ -71,10 +71,11 @@ class Config:
 
     # 알림 보존·아카이브
     ALERT_RETENTION_DAYS = int(os.getenv("ALERT_RETENTION_DAYS", 90))  # N일 경과분 아카이브
-    ALERT_AUTO_ARCHIVE = os.getenv("ALERT_AUTO_ARCHIVE", "False").lower() == "true"
+    ALERT_ARCHIVE_RETENTION_DAYS = int(os.getenv("ALERT_ARCHIVE_RETENTION_DAYS", 365))
+    AUDIT_RETENTION_DAYS = int(os.getenv("AUDIT_RETENTION_DAYS", 365))
 
-    # 데이터 보존 정리 — 로그·DB·리포트를 N일만 유지하고 자동 삭제
-    DATA_RETENTION_DAYS = int(os.getenv("DATA_RETENTION_DAYS", 3))
+    # 파일 로그·리포트·생성 플레이북 보존 (DB 보존과 분리)
+    DATA_RETENTION_DAYS = int(os.getenv("DATA_RETENTION_DAYS", 30))
     DATA_RETENTION_INTERVAL_HOURS = float(os.getenv("DATA_RETENTION_INTERVAL_HOURS", 6))
 
     # 자동화 취약점 패치 (Ansible)

@@ -315,7 +315,7 @@ function loadPriorityQueue() {
     const groupBox = document.getElementById('overview-alert-groups');
     const groups = groupData.groups || [];
     if (groupBox) groupBox.innerHTML = groups.length ? groups.map(g => `
-      <div class="priority-item" onclick="showPanel('alert-history')">
+      <div class="priority-item" onclick="openAlertGroup('${escapeHtml(g.src_ip)}','${escapeHtml(g.threat_type)}')">
         <div>
           <div class="priority-title font-monospace">${escapeHtml(g.src_ip)} · ${escapeHtml(g.threat_label)}</div>
           <div class="priority-meta">최종 ${escapeHtml((g.last_seen || '').slice(5))} · 미처리 ${g.open_count}건</div>

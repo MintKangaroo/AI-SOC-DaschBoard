@@ -15,22 +15,45 @@ function loadRetention() {
     set('mr-live', (d.live ?? 0).toLocaleString());
     set('mr-archived', (d.archived ?? 0).toLocaleString());
     set('mr-oldest', d.oldest || '-');
-    set('mr-days', d.retention_days ?? '-');
+    const p = d.policy || {};
+    set('mr-days', p.live_days ?? '-');
+    set('mr-archive-days', p.archive_days ?? '-');
+    set('mr-audit-days', p.audit_days ?? '-');
+    set('mr-file-days', p.file_days ?? '-');
+    set('mr-preview-archive', (d.to_archive ?? 0).toLocaleString());
+    set('mr-preview-delete', (d.destructive_total ?? 0).toLocaleString());
     const lbl = document.getElementById('mr-archive-label');
-    if (lbl) lbl.textContent = `${d.retention_days ?? ''}일 경과분 아카이브`;
+    if (lbl) lbl.textContent = '정책 지금 실행';
+    const hist = document.getElementById('mr-history');
+    if (hist) hist.innerHTML = (d.history || []).slice(0, 5).map(h =>
+      `<div>${escapeHtml(h.ts)} · ${escapeHtml(h.trigger)} · 아카이브 ${h.archived} · 삭제 ${h.archive_deleted + h.audit_deleted + h.files_deleted}</div>`
+    ).join('') || '아직 실행 이력 없음';
   }).catch(() => {});
 }
 
 function runArchive() {
   const msg = document.getElementById('mr-msg');
-  if (!confirm('보존기간이 지난 알림을 아카이브 테이블로 이동합니다. (무손실, 이력 검색에선 제외됨)\n계속할까요?')) return;
-  fetch('/api/alerts/archive', { method: 'POST' }).then(r => r.json()).then(d => {
+  const arch = document.getElementById('mr-preview-archive')?.textContent || '0';
+  const del = document.getElementById('mr-preview-delete')?.textContent || '0';
+  if (!confirm(`미리보기: 알림 ${arch}건 아카이브, 장기 보존 만료 ${del}건 영구삭제\n계속할까요?`)) return;
+  fetch('/api/alerts/retention/run', { method: 'POST', headers: {'Content-Type':'application/json'}, body:'{}' })
+  .then(async r => ({status:r.status, body:await r.json()})).then(({status, body:d}) => {
+    if (status === 409 && d.requires_confirmation) {
+      if (!confirm(`${d.error}\n정말 실행할까요?`)) return;
+      return fetch('/api/alerts/retention/run', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({confirm_large:true})})
+        .then(r => r.json()).then(showRetentionResult);
+    }
+    showRetentionResult(d);
+  }).catch(() => { if (msg) { msg.className = 'small mt-2 text-danger'; msg.textContent = '요청 실패'; } });
+
+  function showRetentionResult(d) {
     if (msg) {
       msg.className = 'small mt-2 ' + (d.success ? 'text-success' : 'text-danger');
-      msg.textContent = d.success ? `${(d.moved || 0).toLocaleString()}건 아카이브 완료` : (d.error || '실패');
+      const r = d.result || {};
+      msg.textContent = d.success ? `아카이브 ${(r.archived || 0).toLocaleString()}건 · 영구삭제 ${((r.archive_deleted||0)+(r.audit_deleted||0)+(r.files_deleted||0)).toLocaleString()}건` : (d.error || '실패');
     }
     loadRetention();
-  }).catch(() => { if (msg) { msg.className = 'small mt-2 text-danger'; msg.textContent = '요청 실패'; } });
+  }
 }
 
 function renderMetrics(d) {
