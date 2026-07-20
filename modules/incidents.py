@@ -7,10 +7,12 @@ SOC 실무의 케이스 관리 워크플로:
   자동 승격·병합되고, 차단 등 대응 조치가 타임라인에 기록된다.
 
 상태 흐름: OPEN → INVESTIGATING → CONTAINED → RESOLVED
-data/incidents.json 에 영속화.
+data/incidents.json 에 원자적으로 영속화하고 직전 정상본을 .bak 으로 보존한다.
 """
 import os
 import json
+import shutil
+import tempfile
 import threading
 from datetime import datetime
 
@@ -196,22 +198,63 @@ class IncidentManager:
                 pass
 
     def _load(self):
-        try:
-            if os.path.exists(self.store_path):
-                with open(self.store_path, "r", encoding="utf-8") as f:
+        if not self.store_path:
+            return
+        candidates = (self.store_path, self.store_path + ".bak")
+        last_error = None
+        for path in candidates:
+            if not os.path.exists(path):
+                continue
+            try:
+                with open(path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                self.incidents = {int(k): v for k, v in
-                                  data.get("incidents", {}).items()}
-                self._next_id = data.get("next_id", len(self.incidents) + 1)
-        except Exception as e:
-            print(f"[Incidents] 로드 실패: {e}")
+                loaded = {int(k): v for k, v in data.get("incidents", {}).items()}
+                self.incidents = loaded
+                self._next_id = max(
+                    int(data.get("next_id", 1)),
+                    max(loaded.keys(), default=0) + 1,
+                )
+                if path.endswith(".bak"):
+                    print("[Incidents] 기본 저장본 손상 — 백업에서 복구")
+                    self._save(create_backup=False)
+                return
+            except (OSError, ValueError, TypeError, json.JSONDecodeError) as e:
+                last_error = e
+        if last_error:
+            print(f"[Incidents] 로드 실패(백업 포함): {last_error}")
 
-    def _save(self):
+    def _save(self, create_backup=True):
+        """완성된 임시 파일만 원본과 교체해 중단 시 JSON 절단을 방지한다."""
+        tmp_path = None
         try:
-            os.makedirs(os.path.dirname(self.store_path) or ".", exist_ok=True)
-            with open(self.store_path, "w", encoding="utf-8") as f:
+            directory = os.path.dirname(self.store_path) or "."
+            os.makedirs(directory, exist_ok=True)
+            fd, tmp_path = tempfile.mkstemp(prefix=".incidents-", suffix=".tmp",
+                                            dir=directory, text=True)
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
                 json.dump({"next_id": self._next_id,
                            "incidents": {str(k): v for k, v in self.incidents.items()}},
                           f, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+            if create_backup and os.path.exists(self.store_path):
+                try:
+                    shutil.copy2(self.store_path, self.store_path + ".bak")
+                except OSError:
+                    pass
+            os.replace(tmp_path, self.store_path)
+            tmp_path = None
+            # 최초 저장에도 복구본을 남긴다. 이후 저장부터는 위에서 직전 정상본을 보존한다.
+            if create_backup and not os.path.exists(self.store_path + ".bak"):
+                try:
+                    shutil.copy2(self.store_path, self.store_path + ".bak")
+                except OSError:
+                    pass
         except Exception as e:
             print(f"[Incidents] 저장 실패: {e}")
+        finally:
+            if tmp_path:
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass

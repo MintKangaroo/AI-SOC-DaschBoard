@@ -42,6 +42,33 @@ def get_alerts():
     })
 
 
+@api_bp.route("/alerts/groups", methods=["GET"])
+def alert_groups():
+    """반복 알림을 출발지 IP·위협유형으로 묶어 조사 우선순위로 제공한다."""
+    _, td, *_ = get_services()
+    hours = min(24 * 30, max(1, request.args.get("hours", 24, type=int)))
+    limit = min(100, max(1, request.args.get("limit", 20, type=int)))
+    min_count = min(100, max(2, request.args.get("min_count", 2, type=int)))
+    if td.store:
+        groups = td.store.grouped_recent(hours=hours, min_count=min_count, limit=limit)
+    else:
+        grouped = {}
+        for alert in td.get_alerts(limit=500):
+            key = (alert.get("src_ip"), alert.get("threat_type"))
+            item = grouped.setdefault(key, {"src_ip": key[0], "threat_type": key[1],
+                "count": 0, "open_count": 0, "severity": alert.get("severity"),
+                "first_seen": alert.get("timestamp"), "last_seen": alert.get("timestamp")})
+            item["count"] += 1
+            item["open_count"] += alert.get("status") == "OPEN"
+            item["last_seen"] = max(item["last_seen"], alert.get("timestamp"))
+        groups = sorted((g for g in grouped.values() if g["count"] >= min_count),
+                        key=lambda g: (g["open_count"], g["count"]), reverse=True)[:limit]
+    for group in groups:
+        group["threat_label"] = td.threat_type_labels().get(
+            group["threat_type"], group["threat_type"])
+    return jsonify({"hours": hours, "groups": groups, "total": len(groups)})
+
+
 @api_bp.route("/alerts/history", methods=["GET"])
 def alerts_history():
     """전체 알림 이력 검색 (기간·심각도·상태·유형·IP·본문). 페이지네이션."""

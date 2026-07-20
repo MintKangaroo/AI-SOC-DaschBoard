@@ -209,6 +209,34 @@ class AlertStore:
         return [{"id": r[0], "threat_type": r[1], "severity": r[2],
                  "src_ip": r[3], "dst_ip": r[4], "timestamp": r[5]} for r in rows]
 
+    def grouped_recent(self, hours=24, min_count=2, limit=20):
+        """최근 반복 알림을 출발지·위협유형별로 묶어 조사 우선순위로 반환한다."""
+        hours = max(1, min(24 * 30, int(hours)))
+        min_count = max(2, int(min_count))
+        limit = max(1, min(100, int(limit)))
+        with self._lock:
+            rows = self._conn.execute(
+                """SELECT src_ip, threat_type, COUNT(*) AS cnt,
+                          MIN(timestamp), MAX(timestamp),
+                          SUM(CASE WHEN status='OPEN' THEN 1 ELSE 0 END),
+                          MAX(CASE severity WHEN 'CRITICAL' THEN 4 WHEN 'HIGH' THEN 3
+                                            WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 1 ELSE 0 END)
+                   FROM alerts
+                   WHERE timestamp >= datetime('now', ?, 'localtime')
+                         AND COALESCE(src_ip, '') != ''
+                   GROUP BY src_ip, threat_type
+                   HAVING COUNT(*) >= ?
+                   ORDER BY MAX(CASE severity WHEN 'CRITICAL' THEN 4 WHEN 'HIGH' THEN 3
+                                               WHEN 'MEDIUM' THEN 2 WHEN 'LOW' THEN 1 ELSE 0 END) DESC,
+                            SUM(CASE WHEN status='OPEN' THEN 1 ELSE 0 END) DESC,
+                            cnt DESC, MAX(timestamp) DESC
+                   LIMIT ?""",
+                (f"-{hours} hours", min_count, limit)).fetchall()
+        sev = {4: "CRITICAL", 3: "HIGH", 2: "MEDIUM", 1: "LOW", 0: "INFO"}
+        return [{"src_ip": r[0], "threat_type": r[1], "count": r[2],
+                 "first_seen": r[3], "last_seen": r[4], "open_count": r[5],
+                 "severity": sev.get(r[6], "INFO")} for r in rows]
+
     def _ensure_archive(self):
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS alerts_archive (

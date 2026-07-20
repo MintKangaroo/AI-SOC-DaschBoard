@@ -41,6 +41,32 @@
         </div>
       </div>
 
+      <!-- 분석가 우선 처리 큐: 원시 통계보다 지금 조사할 항목을 먼저 노출 -->
+      <div class="row g-3 mb-3" id="overview-priority-queue">
+        <div class="col-lg-6">
+          <div class="card-panel h-100">
+            <div class="card-panel-header">
+              <i class="fa fa-fire text-danger me-2"></i>지금 처리할 인시던트
+              <button class="btn btn-xs btn-outline-secondary ms-auto" onclick="showPanel('incidents')">전체 보기</button>
+            </div>
+            <div id="overview-active-incidents" class="priority-list">
+              <div class="text-muted p-3 small text-center">활성 인시던트 확인 중…</div>
+            </div>
+          </div>
+        </div>
+        <div class="col-lg-6">
+          <div class="card-panel h-100">
+            <div class="card-panel-header">
+              <i class="fa fa-layer-group text-warning me-2"></i>반복 공격 그룹
+              <span class="ms-auto small text-muted">최근 24시간 · 2건 이상</span>
+            </div>
+            <div id="overview-alert-groups" class="priority-list">
+              <div class="text-muted p-3 small text-center">반복 알림 분석 중…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- 메인 관제 커맨드월: 라이브 스트림 | 3D 지도 | KPI 레일 (울트라와이드 3열) -->
       <div class="row g-3 mb-3 command-wall">
         <div class="col-lg-5 col-xxl-4">

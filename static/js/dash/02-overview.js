@@ -106,6 +106,7 @@ socket.on('new_alert', alert => {
 
   // THREAT LEVEL 재계산
   updateThreatLevel();
+  if (typeof schedulePriorityReload === 'function') schedulePriorityReload();
 
   // 통합 라이브 스트림
   const conf = alert.confidence != null ? ` · 신뢰도 ${Math.round(alert.confidence*100)}%` : '';

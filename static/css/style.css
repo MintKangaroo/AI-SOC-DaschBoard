@@ -330,6 +330,18 @@ html, body {
 .ml-status-overview .badge.bg-success { background: #3fb950 !important; }
 .ml-status-overview .badge.bg-danger  { background: #f85149 !important; }
 
+/* 개요: 분석가 우선 처리 큐 */
+.priority-list { max-height: 220px; overflow-y: auto; }
+.priority-item {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px;
+  padding: 10px 12px; border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.priority-item:last-child { border-bottom: 0; }
+.priority-item:hover { background: rgba(57, 208, 216, .06); }
+.priority-item .priority-title { color: #e6edf3; font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.priority-item .priority-meta { color: var(--muted); font-size: 10px; }
+.priority-item .priority-count { align-self: center; font-size: 12px; color: var(--orange); }
+
 /* Leaflet dark cyber-globe override */
 .leaflet-container {
   background: radial-gradient(ellipse at center, #0b1e3a 0%, #020615 70%, #000 100%) !important;

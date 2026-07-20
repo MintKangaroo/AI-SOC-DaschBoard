@@ -286,6 +286,45 @@ function loadIncidents() {
     .catch(() => {});
 }
 
+let _priorityReloadTimer = null;
+function schedulePriorityReload() {
+  if (_priorityReloadTimer) return;
+  _priorityReloadTimer = setTimeout(() => {
+    _priorityReloadTimer = null;
+    if (isPanelVisible('overview')) loadPriorityQueue();
+  }, 800);
+}
+
+function loadPriorityQueue() {
+  Promise.all([
+    fetch('/api/incidents?limit=8').then(r => r.json()),
+    fetch('/api/alerts/groups?hours=24&min_count=2&limit=8').then(r => r.json()),
+  ]).then(([incData, groupData]) => {
+    const incBox = document.getElementById('overview-active-incidents');
+    const active = (incData.incidents || []).filter(i =>
+      i.status === 'OPEN' || i.status === 'INVESTIGATING').slice(0, 5);
+    if (incBox) incBox.innerHTML = active.length ? active.map(i => `
+      <div class="priority-item" onclick="showPanel('incidents'); selectIncident(${i.id})">
+        <div>
+          <div class="priority-title">#${i.id} ${escapeHtml(i.title)}</div>
+          <div class="priority-meta">${escapeHtml(i.status)} · ${escapeHtml(i.assignee || '미배정')} · ${escapeHtml((i.updated || '').slice(5))}</div>
+        </div>
+        <div class="priority-count">${sevBadge(i.severity)} · ${i.alert_count}건</div>
+      </div>`).join('') : '<div class="text-success p-3 small text-center">처리 대기 인시던트 없음</div>';
+
+    const groupBox = document.getElementById('overview-alert-groups');
+    const groups = groupData.groups || [];
+    if (groupBox) groupBox.innerHTML = groups.length ? groups.map(g => `
+      <div class="priority-item" onclick="showPanel('alert-history')">
+        <div>
+          <div class="priority-title font-monospace">${escapeHtml(g.src_ip)} · ${escapeHtml(g.threat_label)}</div>
+          <div class="priority-meta">최종 ${escapeHtml((g.last_seen || '').slice(5))} · 미처리 ${g.open_count}건</div>
+        </div>
+        <div class="priority-count">${sevBadge(g.severity)} · ${g.count}회</div>
+      </div>`).join('') : '<div class="text-success p-3 small text-center">반복 공격 그룹 없음</div>';
+  }).catch(() => {});
+}
+
 function renderIncidents(d) {
   const stats = d.stats || {};
   const set = (id, v) => {
@@ -372,6 +411,7 @@ socket.on('incident_update', d => {
   if (!document.getElementById('panel-incidents')?.classList.contains('d-none')) {
     renderIncidents(d);
   }
+  schedulePriorityReload();
 });
 
 const SOAR_LIVE_LABEL = {
@@ -462,6 +502,7 @@ document.addEventListener('DOMContentLoaded', () => {
   loadAuthlog();
   loadSoar();
   loadIncidents();
+  loadPriorityQueue();
 
   // 마지막 갱신 시간 표시
   setInterval(() => {
@@ -470,4 +511,3 @@ document.addEventListener('DOMContentLoaded', () => {
   }, 1000);
 
 });
-

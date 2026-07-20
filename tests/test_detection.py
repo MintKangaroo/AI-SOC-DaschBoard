@@ -4,6 +4,7 @@
 """
 import os
 import sys
+import json
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -517,6 +518,32 @@ def test_incident_persistence(tmp_path):
     im2 = IncidentManager(store_path=path)
     assert im2.get(inc_id) is not None
     assert im2.get_stats()["total"] == 1
+
+
+def test_incident_recovers_from_backup(tmp_path):
+    path = str(tmp_path / "inc.json")
+    im = IncidentManager(store_path=path)
+    inc_id = im.promote_alert(_fake_alert(1))
+    im.update(inc_id, note="백업 생성")
+    with open(path, "w", encoding="utf-8") as f:
+        f.write('{"incidents":')
+
+    recovered = IncidentManager(store_path=path)
+    assert recovered.get(inc_id) is not None
+    with open(path, "r", encoding="utf-8") as f:
+        assert json.load(f)["incidents"]
+
+
+def test_alert_store_groups_repeated_alerts(tmp_path):
+    store = AlertStore(str(tmp_path / "alerts.db"))
+    for _ in range(3):
+        store.save(Alert("PORT_SCAN", "HIGH", "8.8.8.8", "10.0.0.1", "scan"))
+    store.save(Alert("DDOS", "CRITICAL", "1.1.1.1", "10.0.0.1", "ddos"))
+    groups = store.grouped_recent(hours=24, min_count=2)
+    assert len(groups) == 1
+    assert groups[0]["src_ip"] == "8.8.8.8"
+    assert groups[0]["count"] == 3
+    assert groups[0]["severity"] == "HIGH"
 
 
 def test_soar_promotes_incident_on_tp(tmp_path):
