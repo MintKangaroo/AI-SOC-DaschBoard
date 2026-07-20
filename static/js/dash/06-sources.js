@@ -1,7 +1,9 @@
 /* dashboard/06-sources.js — SIEM·SSH인증·IP평판·EDR·네트워크관제·퍼플팀
    (dashboard.js 원본 순서 유지 — 순서대로 로드) */
-/* ════════════════════ SIEM (외부 접근 로그) ════════════════════ */
+/* ════════════════════ SIEM — Splunk 스타일 이벤트 검색 ════════════════════ */
 let siemEventsBuffer = [];
+let _siemSources = [];
+let _siemRenderTimer = null;
 
 function loadSiem() {
   fetch('/api/integrations/siem')
@@ -12,85 +14,143 @@ function loadSiem() {
 
 function renderSiemStatus(d) {
   const stats = d.stats || {};
-  const set = (id, v) => {
-    const el = document.getElementById(id);
-    if (el) el.textContent = (v ?? 0).toLocaleString();
-  };
-  set('siem-total', stats.total_events);
-  set('siem-suspicious', stats.suspicious_events);
-  set('siem-unique-ips', stats.unique_ips);
-  set('siem-sources-ok', stats.sources_ok);
+  _siemSources = d.sources || [];
   const badge = document.getElementById('sidebar-siem-count');
   if (badge) badge.textContent = (stats.suspicious_events || 0).toLocaleString();
   setPipe('pipe-siem-total', stats.total_events);
   setPipe('pipe-siem-susp', stats.suspicious_events);
-
-  const srcTbody = document.getElementById('siem-sources-tbody');
-  if (srcTbody) {
-    const rows = (d.sources || []).map(s => `
-      <tr>
-        <td class="small" title="${escapeHtml(s.path || '')}" style="color:#e6edf3">${escapeHtml(s.name)}</td>
-        <td class="small" style="color:#e6edf3">${(s.events || 0).toLocaleString()}</td>
-        <td class="small text-danger">${(s.suspicious || 0).toLocaleString()}</td>
-        <td class="small">${s.exists
-          ? '<span class="badge bg-success">연결됨</span>'
-          : '<span class="badge bg-secondary">파일 없음</span>'}</td>
-      </tr>`).join('');
-    srcTbody.innerHTML = rows || '<tr><td colspan="4" class="text-muted text-center">소스 없음</td></tr>';
-  }
-
-  const topBox = document.getElementById('siem-top-ips');
-  if (topBox) {
-    const top = stats.top_ips || [];
-    topBox.innerHTML = top.length
-      ? top.map(([ip, cnt], i) => `
-          <div class="d-flex justify-content-between p-1 border-bottom border-secondary small">
-            <span class="font-monospace" style="color:#e6edf3">${i + 1}. ${escapeHtml(ip)}</span>
-            <span class="text-warning">${cnt.toLocaleString()}건</span>
-          </div>`).join('')
-      : '<div class="text-muted p-2">데이터 없음</div>';
-  }
-
   siemEventsBuffer = d.events || [];
   renderSiemEvents();
-
-  const total = stats.total_events || 0, susp = stats.suspicious_events || 0;
-  svgDonut('siem-donut', [
-    { label: '정상 요청', value: Math.max(0, total - susp), color: '#3fb950' },
-    { label: '의심 요청', value: susp, color: '#f85149' },
-  ], total.toLocaleString(), '총 이벤트');
-  svgHBars('siem-bars', (d.sources || []).slice(0, 6).map(s => ({
-    label: s.name, value: s.events || 0, color: (s.suspicious || 0) > 0 ? '#f0a500' : '#39d0d8',
-  })), '건');
 }
 
-function siemEventRow(e) {
-  const sevCls = e.severity === 'CRITICAL' ? 'bg-danger'
-              : e.severity === 'HIGH'     ? 'bg-orange'
-              : e.severity === 'MEDIUM'   ? 'bg-warning text-dark'
-              : 'bg-secondary';
-  return `
-    <tr ${e.suspicious ? 'style="background:rgba(248,81,73,.08)"' : ''}>
-      <td class="small" style="color:#e6edf3;white-space:nowrap">${escapeHtml(e.timestamp)}</td>
-      <td class="small" style="color:#e6edf3;white-space:nowrap">${escapeHtml(e.source)}</td>
-      <td class="small font-monospace" style="color:#e6edf3">${escapeHtml(e.ip)}</td>
-      <td class="small font-monospace text-truncate" style="max-width:280px;color:#e6edf3"
-          title="${escapeHtml(e.request)}">${escapeHtml(e.request)}</td>
-      <td class="small ${e.status >= 400 ? 'text-danger' : 'text-success'}">${e.status}</td>
-      <td class="small"><span class="badge ${sevCls}" style="font-size:9px">${escapeHtml(e.category)}</span></td>
-    </tr>`;
+// 검색어 매칭 (ip/요청/분류/소스/severity/suspicious 키워드)
+function _siemMatch(e, q) {
+  if (!q) return true;
+  q = q.toLowerCase();
+  if (q === 'suspicious') return e.suspicious;
+  return [e.ip, e.request, e.category, e.source, e.severity, String(e.status)]
+    .some(v => (v || '').toString().toLowerCase().includes(q));
+}
+
+// 타임스탬프 → HH:MM 버킷 키
+function _siemMinute(ts) {
+  const m = (ts || '').match(/(\d{2}):(\d{2}):\d{2}/);
+  return m ? `${m[1]}:${m[2]}` : '--:--';
+}
+
+function _siemFiltered() {
+  const q = document.getElementById('siem-search')?.value.trim() || '';
+  const onlySusp = document.getElementById('siem-suspicious-only')?.checked;
+  const mins = parseInt(document.getElementById('siem-timerange')?.value || '0');
+  let evs = siemEventsBuffer.filter(e => _siemMatch(e, q) && (!onlySusp || e.suspicious));
+  if (mins > 0) {
+    const cutoff = Date.now() - mins * 60000;
+    // 타임스탬프에 날짜가 제각각이라 상대 최근성은 버퍼 순서로 근사(최신이 앞)
+    evs = evs.slice(0, Math.max(20, Math.round(evs.length * Math.min(1, mins / 60))));
+  }
+  return evs;
 }
 
 function renderSiemEvents() {
-  const tbody = document.getElementById('siem-events-tbody');
-  if (!tbody) return;
-  const suspiciousOnly = document.getElementById('siem-suspicious-only')?.checked;
-  const rows = siemEventsBuffer
-    .filter(e => !suspiciousOnly || e.suspicious)
-    .slice(0, 200);
-  tbody.innerHTML = rows.length
-    ? rows.map(siemEventRow).join('')
-    : '<tr><td colspan="6" class="text-muted text-center p-3">이벤트 없음</td></tr>';
+  const box = document.getElementById('siem-events');
+  if (!box) return;
+  const evs = _siemFiltered();
+  const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = (v ?? 0).toLocaleString(); };
+  set('siem-result-count', evs.length);
+  set('siem-suspicious', evs.filter(e => e.suspicious).length);
+  set('siem-unique-ips', new Set(evs.map(e => e.ip)).size);
+  set('siem-sources-ok', _siemSources.filter(s => s.exists).length);
+
+  box.innerHTML = evs.length
+    ? evs.slice(0, 200).map(siemRawEvent).join('')
+    : '<div class="text-muted p-4 text-center small">일치하는 이벤트가 없습니다.</div>';
+
+  renderSiemTimeline(evs);
+  renderSiemFields(evs);
+}
+
+// Splunk raw event (행 클릭 시 필드 펼침)
+function siemRawEvent(e, idx) {
+  const sev = e.severity || 'INFO';
+  const sevColor = sev === 'CRITICAL' ? '#f85149' : sev === 'HIGH' ? '#f0a500'
+                 : sev === 'MEDIUM' ? '#d29922' : e.suspicious ? '#f0a500' : '#3fb950';
+  const raw = `${e.ip} - - [${e.timestamp}] "${e.request}" ${e.status}`;
+  const fields = [
+    ['host', e.source], ['src_ip', e.ip], ['status', e.status],
+    ['severity', sev], ['category', e.category], ['suspicious', e.suspicious],
+  ].map(([k, v]) => `<span class="spl-fv" onclick="siemSetSearch('${escapeHtml(String(v))}')">
+      <span class="spl-fk">${k}</span>=<span class="spl-fvv">${escapeHtml(String(v))}</span></span>`).join('');
+  return `
+    <div class="spl-event ${e.suspicious ? 'spl-event-susp' : ''}" style="border-left-color:${sevColor}"
+         onclick="this.classList.toggle('open')">
+      <div class="spl-event-top">
+        <span class="spl-ts">${escapeHtml(e.timestamp)}</span>
+        <span class="spl-raw">${escapeHtml(raw)}</span>
+        <span class="spl-sev" style="background:${sevColor}">${escapeHtml(sev)}</span>
+      </div>
+      <div class="spl-event-fields">${fields}</div>
+    </div>`;
+}
+
+// 타임라인 히스토그램 (분당 이벤트 · 의심 스택)
+function renderSiemTimeline(evs) {
+  const svg = document.getElementById('siem-timeline');
+  if (!svg) return;
+  const buckets = {};
+  evs.forEach(e => {
+    const k = _siemMinute(e.timestamp);
+    (buckets[k] = buckets[k] || { total: 0, susp: 0 });
+    buckets[k].total++; if (e.suspicious) buckets[k].susp++;
+  });
+  const keys = Object.keys(buckets).sort().slice(-40);
+  if (!keys.length) { svg.innerHTML = ''; return; }
+  const max = Math.max(...keys.map(k => buckets[k].total), 1);
+  const W = svg.clientWidth || 900, H = 110, pad = 18, bw = (W - pad) / keys.length;
+  let g = '';
+  keys.forEach((k, i) => {
+    const b = buckets[k], x = pad + i * bw, h = (b.total / max) * (H - 24);
+    const hs = (b.susp / max) * (H - 24);
+    g += `<rect x="${x + 1}" y="${H - 16 - h}" width="${Math.max(1, bw - 2)}" height="${h}" fill="#2b6cb0"><title>${k} · ${b.total}건</title></rect>`;
+    if (hs > 0) g += `<rect x="${x + 1}" y="${H - 16 - hs}" width="${Math.max(1, bw - 2)}" height="${hs}" fill="#f85149"><title>${k} · 의심 ${b.susp}</title></rect>`;
+  });
+  // x축 라벨(양끝)
+  g += `<text x="${pad}" y="${H - 3}" fill="#8b949e" font-size="9">${keys[0]}</text>`;
+  g += `<text x="${W - 4}" y="${H - 3}" fill="#8b949e" font-size="9" text-anchor="end">${keys[keys.length - 1]}</text>`;
+  g += `<text x="${pad - 4}" y="12" fill="#6e7681" font-size="9" text-anchor="end">${max}</text>`;
+  svg.innerHTML = g;
+}
+
+// Splunk 필드 사이드바 (필드별 top 값 + 건수)
+function renderSiemFields(evs) {
+  const box = document.getElementById('siem-fields');
+  if (!box) return;
+  const fieldDefs = [
+    ['category', '분류', e => e.category],
+    ['source', '소스', e => e.source],
+    ['severity', '심각도', e => e.severity],
+    ['src_ip', '출발지 IP', e => e.ip],
+    ['status', '상태', e => String(e.status)],
+  ];
+  box.innerHTML = fieldDefs.map(([key, label, fn]) => {
+    const counts = {};
+    evs.forEach(e => { const v = fn(e); if (v != null && v !== '') counts[v] = (counts[v] || 0) + 1; });
+    const top = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    const distinct = Object.keys(counts).length;
+    const vals = top.map(([v, c]) => `
+      <div class="spl-field-val" onclick="siemSetSearch('${escapeHtml(v)}')">
+        <span class="spl-field-v">${escapeHtml(v)}</span><span class="spl-field-c">${c}</span>
+      </div>`).join('');
+    return `<div class="spl-field">
+      <div class="spl-field-name">${escapeHtml(label)} <span class="spl-field-distinct">${distinct}</span></div>
+      ${vals || '<div class="spl-field-val text-muted">—</div>'}
+    </div>`;
+  }).join('');
+}
+
+function siemSetSearch(v) {
+  const inp = document.getElementById('siem-search');
+  if (inp) { inp.value = v; renderSiemEvents(); }
+  event && event.stopPropagation && event.stopPropagation();
 }
 
 socket.on('siem_event', e => {
@@ -100,19 +160,18 @@ socket.on('siem_event', e => {
     const el = document.getElementById(id);
     if (el) el.textContent = ((parseInt(el.textContent.replace(/,/g, '')) || 0) + n).toLocaleString();
   };
-  bump('siem-total', 1);
   bump('pipe-siem-total', 1);
   if (e.suspicious) {
-    bump('siem-suspicious', 1);
     bump('sidebar-siem-count', 1);
     bump('pipe-siem-susp', 1);
-    // 의심 이벤트만 라이브 스트림에 노출 (정상 요청 노이즈 차단)
     pushLive('siem', e.severity,
       `<b>${escapeHtml(e.category)}</b> <span class="lv-ip">${escapeHtml(e.ip)}</span> ` +
       `<span class="text-muted">(${escapeHtml(e.source)})</span>`);
   }
-  if (!document.getElementById('panel-siem').classList.contains('d-none')) {
-    renderSiemEvents();
+  // 패널 열려 있을 때만, 그리고 rAF 스로틀로 재렌더(렉 방지)
+  const panel = document.getElementById('panel-siem');
+  if (panel && !panel.classList.contains('d-none') && !_siemRenderTimer) {
+    _siemRenderTimer = setTimeout(() => { _siemRenderTimer = null; renderSiemEvents(); }, 800);
   }
 });
 

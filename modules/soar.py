@@ -22,6 +22,8 @@ import subprocess
 from datetime import datetime
 from collections import deque, Counter
 
+from modules.playbooks import steps_for
+
 
 class SOAREngine:
     AI_TRIAGE_BUDGET = 6          # 5분당 AI 트리아지 최대 횟수 (비용 보호)
@@ -91,6 +93,12 @@ class SOAREngine:
             {"id": "PB-BRUTE-BLOCK",  "name": "무차별 대입 자동 차단",
              "description": "BRUTE_FORCE 알림의 외부 출발지 IP → 차단",
              "enabled": True, "runs": 0, "last_run": None},
+            {"id": "PB-HONEYPOT-BLOCK", "name": "허니팟 접촉 자동 차단",
+             "description": "허니팟 유인 서비스에 접촉한 외부 IP(고신뢰 침해지표) → 즉시 차단",
+             "enabled": True, "runs": 0, "last_run": None},
+            {"id": "PB-CORRELATED-ESCALATE", "name": "상관관계 발동 에스컬레이션",
+             "description": "SIEM 상관관계 규칙(다중벡터·스캔→침투 등) 발동 → 인시던트 승격",
+             "enabled": True, "runs": 0, "last_run": None},
         ]
 
     # ------------------------------------------------------------------ #
@@ -152,7 +160,7 @@ class SOAREngine:
                     "allowlist": list(self._allowlist),
                     "prevented": self.stats["blocks_prevented"],
                 },
-                "playbooks": [dict(p) for p in self.playbooks],
+                "playbooks": [{**p, "steps": steps_for(p["id"])} for p in self.playbooks],
                 "blocked_ips": [
                     {"ip": ip, **info} for ip, info in
                     sorted(self.blocked_ips.items(),
@@ -226,13 +234,27 @@ class SOAREngine:
         severity = alert.get("severity")
         src_ip = alert.get("src_ip")
 
+        threat_type = alert.get("threat_type")
+
         # PB-BRUTE-BLOCK: AI 없이도 즉시 차단 (명백한 케이스)
         if (self._pb_enabled("PB-BRUTE-BLOCK") and self.auto_block
-                and alert.get("threat_type") == "BRUTE_FORCE"
+                and threat_type == "BRUTE_FORCE"
                 and self._is_external(src_ip)):
             self._pb_run("PB-BRUTE-BLOCK")
             self._block_ip(src_ip, f"무차별 대입 (알림 #{alert_id})",
                            playbook="PB-BRUTE-BLOCK")
+
+        # PB-HONEYPOT-BLOCK: 허니팟 접촉 = 고신뢰 침해지표 → 즉시 차단
+        if (self._pb_enabled("PB-HONEYPOT-BLOCK") and self.auto_block
+                and threat_type == "HONEYPOT"
+                and self._is_external(src_ip)):
+            self._pb_run("PB-HONEYPOT-BLOCK")
+            self._block_ip(src_ip, f"허니팟 유인 접촉 (알림 #{alert_id})",
+                           playbook="PB-HONEYPOT-BLOCK")
+
+        # PB-CORRELATED-ESCALATE: 상관관계 규칙 발동 알림 → 실행 기록(트리아지에서 인시던트 승격)
+        if self._pb_enabled("PB-CORRELATED-ESCALATE") and threat_type == "CORRELATED":
+            self._pb_run("PB-CORRELATED-ESCALATE")
 
         # PB-AI-TRIAGE
         if (not self._pb_enabled("PB-AI-TRIAGE") or severity not in ("HIGH", "CRITICAL")

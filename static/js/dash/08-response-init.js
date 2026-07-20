@@ -10,6 +10,44 @@ function loadSoar() {
 
 let _soarStatus = null;   // 판정 상세 모달이 참조할 최신 SOAR 상태 캐시
 
+// 플레이북 단계 유형 → 색상/한글
+const PB_STEP_KIND = {
+  detect:   { ko: '탐지', color: '#58a6ff' },
+  enrich:   { ko: '강화', color: '#a371f7' },
+  decide:   { ko: '판정', color: '#f0a500' },
+  contain:  { ko: '대응', color: '#f85149' },
+  notify:   { ko: '통보', color: '#39d0d8' },
+  followup: { ko: '사후', color: '#3fb950' },
+};
+
+function renderPlaybookCard(pb) {
+  const steps = (pb.steps || []).map((s, i) => {
+    const k = PB_STEP_KIND[s.kind] || { ko: '', color: '#8b949e' };
+    const arrow = i > 0 ? '<span class="pb-arrow">→</span>' : '';
+    return `${arrow}<span class="pb-step" style="border-color:${k.color}">
+      <span class="pb-step-kind" style="background:${k.color}">${k.ko}</span>
+      <span class="pb-step-label">${escapeHtml(s.label)}</span>
+    </span>`;
+  }).join('');
+  const dim = pb.enabled ? '' : 'opacity:.45;';
+  return `
+    <div class="pb-card" style="${dim}">
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <div class="form-check form-switch mb-0">
+          <input class="form-check-input" type="checkbox" ${pb.enabled ? 'checked' : ''}
+                 onchange="soarTogglePb('${escapeHtml(pb.id)}')">
+        </div>
+        <span class="badge bg-dark border border-secondary font-monospace" style="font-size:9px">${escapeHtml(pb.id)}</span>
+        <span class="small fw-bold flex-fill" style="color:#e6edf3">${escapeHtml(pb.name)}</span>
+        <span class="small text-muted" style="font-size:10px; white-space:nowrap">
+          실행 <b class="text-cyan">${pb.runs}</b>회${pb.last_run ? ` · ${escapeHtml(pb.last_run.slice(11))}` : ''}
+        </span>
+      </div>
+      <div class="small text-muted mb-2" style="font-size:10px">${escapeHtml(pb.description)}</div>
+      <div class="pb-flow">${steps || '<span class="text-muted small">단계 정의 없음</span>'}</div>
+    </div>`;
+}
+
 function renderSoar(d) {
   _soarStatus = d;
   const stats = d.stats || {};
@@ -42,23 +80,10 @@ function renderSoar(d) {
   setPipe('pipe-soar-actions', stats.total_actions);
   setPipe('pipe-soar-blocked', stats.auto_blocked);
 
-  // 플레이북
+  // 플레이북 — 단계 흐름도(runbook) 시각화
   const pbBox = document.getElementById('soar-playbooks');
   if (pbBox) {
-    pbBox.innerHTML = (d.playbooks || []).map(pb => `
-      <div class="d-flex align-items-center gap-2 p-2 border-bottom border-secondary">
-        <div class="form-check form-switch mb-0">
-          <input class="form-check-input" type="checkbox" ${pb.enabled ? 'checked' : ''}
-                 onchange="soarTogglePb('${escapeHtml(pb.id)}')">
-        </div>
-        <div class="flex-fill">
-          <div class="small fw-bold" style="color:#e6edf3">${escapeHtml(pb.name)}</div>
-          <div class="small text-muted" style="font-size:10px">${escapeHtml(pb.description)}</div>
-        </div>
-        <div class="text-end small text-muted" style="font-size:10px; white-space:nowrap">
-          실행 ${pb.runs}회${pb.last_run ? `<br/>${escapeHtml(pb.last_run)}` : ''}
-        </div>
-      </div>`).join('');
+    pbBox.innerHTML = (d.playbooks || []).map(renderPlaybookCard).join('');
   }
 
   // 차단 IP 목록

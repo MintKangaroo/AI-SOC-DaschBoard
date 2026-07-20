@@ -257,6 +257,22 @@ class AlertStore:
                 self._conn.commit()
         return moved
 
+    def purge_older_than(self, days):
+        """N일 이전 알림을 활성·아카이브 테이블에서 영구 삭제. 삭제 건수 반환."""
+        days = int(days)
+        arg = f"-{days} days"
+        cutoff = "datetime('now', ?, 'localtime')"
+        with self._lock:
+            self._ensure_archive()
+            n1 = self._conn.execute(
+                f"SELECT COUNT(*) FROM alerts WHERE timestamp < {cutoff}", (arg,)).fetchone()[0]
+            self._conn.execute(f"DELETE FROM alerts WHERE timestamp < {cutoff}", (arg,))
+            n2 = self._conn.execute(
+                f"SELECT COUNT(*) FROM alerts_archive WHERE timestamp < {cutoff}", (arg,)).fetchone()[0]
+            self._conn.execute(f"DELETE FROM alerts_archive WHERE timestamp < {cutoff}", (arg,))
+            self._conn.commit()
+        return n1 + n2
+
     def max_id(self):
         with self._lock:
             row = self._conn.execute("SELECT MAX(id) FROM alerts").fetchone()

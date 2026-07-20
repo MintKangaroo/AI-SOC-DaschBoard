@@ -1417,3 +1417,105 @@ input:focus-visible, select:focus-visible, textarea:focus-visible,
   transition: opacity .12s, color .12s;
 }
 .stat-card.clickable:hover::after { opacity: 1; color: var(--cyan); }
+
+/* ── SOAR 플레이북 단계 흐름도 ── */
+.pb-card { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+.pb-card:last-child { border-bottom: none; }
+.pb-flow { display: flex; flex-wrap: wrap; align-items: stretch; gap: 4px; }
+.pb-step {
+  display: inline-flex; flex-direction: column; min-width: 96px; max-width: 160px;
+  border: 1px solid var(--border); border-left-width: 3px; border-radius: 5px;
+  overflow: hidden; background: rgba(255,255,255,.02);
+}
+.pb-step-kind {
+  font-size: 8.5px; font-weight: 700; color: #0d1117;
+  padding: 1px 5px; letter-spacing: .5px;
+}
+.pb-step-label {
+  font-size: 10.5px; color: #cdd9e5; padding: 4px 6px; line-height: 1.35;
+}
+.pb-arrow { align-self: center; color: #6e7681; font-weight: 700; padding: 0 1px; }
+
+/* ══════════════ SIEM — Splunk 스타일 검색 UI ══════════════ */
+.spl-searchbar {
+  display: flex; align-items: center; gap: 8px;
+  background: #0d1117; border: 1px solid #2f4562; border-radius: 6px;
+  padding: 8px 12px; margin-bottom: 8px;
+}
+.spl-prompt { color: #39d0d8; font-family: monospace; font-weight: 700; }
+.spl-search-input {
+  flex: 1; background: transparent; border: none; outline: none;
+  color: #e6edf3; font-family: monospace; font-size: 13px;
+}
+.spl-search-input::placeholder { color: #6e7681; }
+.spl-timerange {
+  background: #161b22; color: #cdd9e5; border: 1px solid #2f4562;
+  border-radius: 5px; font-size: 12px; padding: 4px 8px;
+}
+.spl-search-btn {
+  background: #238636; color: #fff; border: none; border-radius: 5px;
+  padding: 5px 12px; cursor: pointer;
+}
+.spl-search-btn:hover { background: #2ea043; }
+.spl-resultbar {
+  display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+  font-size: 12px; color: #aeb9c4; padding: 4px 4px 8px; border-bottom: 1px solid var(--border);
+}
+.spl-resultbar b { color: #e6edf3; }
+.spl-sep { color: #3d444d; }
+
+.spl-timeline-card {
+  background: #0d1117; border: 1px solid var(--border); border-radius: 6px;
+  padding: 8px 10px; margin-top: 10px;
+}
+.spl-timeline-head { font-size: 11px; color: #cdd9e5; margin-bottom: 2px; }
+
+/* 필드 사이드바 */
+.spl-fields, .spl-events {
+  background: #0d1117; border: 1px solid var(--border); border-radius: 6px; overflow: hidden;
+}
+.spl-fields-head, .spl-events-head {
+  display: flex; align-items: center; background: #161b22; color: #8b949e;
+  font-size: 11px; font-weight: 700; letter-spacing: .5px; padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.spl-field { border-bottom: 1px solid var(--border); padding: 6px 10px; }
+.spl-field-name { font-size: 11px; color: #58a6ff; font-weight: 600; margin-bottom: 3px; }
+.spl-field-distinct {
+  background: #21262d; color: #8b949e; border-radius: 8px; font-size: 9px;
+  padding: 0 6px; margin-left: 4px;
+}
+.spl-field-val {
+  display: flex; justify-content: space-between; font-size: 11px;
+  padding: 2px 4px; cursor: pointer; border-radius: 3px;
+}
+.spl-field-val:hover { background: #161b22; }
+.spl-field-v { color: #cdd9e5; font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+.spl-field-c { color: #6e7681; }
+
+/* raw 이벤트 스트림 */
+.spl-events-body { max-height: 620px; overflow-y: auto; }
+.spl-event {
+  border-left: 3px solid #3fb950; border-bottom: 1px solid #161b22;
+  padding: 6px 10px; cursor: pointer;
+}
+.spl-event:hover { background: #161b22; }
+.spl-event-susp { background: rgba(248,81,73,.05); }
+.spl-event-top { display: flex; align-items: baseline; gap: 10px; }
+.spl-ts { color: #7ee787; font-family: monospace; font-size: 11px; white-space: nowrap; }
+.spl-raw {
+  flex: 1; color: #cdd9e5; font-family: monospace; font-size: 12px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.spl-sev { color: #0d1117; font-size: 8.5px; font-weight: 700; padding: 1px 6px; border-radius: 3px; }
+.spl-event-fields { display: none; flex-wrap: wrap; gap: 6px; margin-top: 6px; padding-left: 4px; }
+.spl-event.open .spl-event-fields { display: flex; }
+.spl-event.open .spl-raw { white-space: normal; }
+.spl-fv {
+  font-family: monospace; font-size: 10.5px; color: #8b949e;
+  background: #161b22; border: 1px solid var(--border); border-radius: 3px;
+  padding: 1px 6px; cursor: pointer;
+}
+.spl-fv:hover { border-color: #58a6ff; }
+.spl-fk { color: #58a6ff; }
+.spl-fvv { color: #e6edf3; }

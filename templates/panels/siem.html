@@ -1,98 +1,68 @@
     <div id="panel-siem" class="panel-section d-none">
       <div class="panel-title">
-        <i class="fa fa-server me-2 text-cyan"></i>SIEM — 외부 접근 로그 수집
+        <i class="fa fa-magnifying-glass-chart me-2 text-cyan"></i>SIEM — 이벤트 검색·분석
+        <span class="badge bg-dark border border-secondary ms-2" style="font-weight:400;font-size:10px">Search &amp; Reporting</span>
         <button class="btn btn-xs btn-outline-cyan ms-auto" onclick="loadSiem()">
           <i class="fa fa-sync me-1"></i>새로고침
         </button>
       </div>
 
-      <!-- 가이드 -->
-      <div class="card-panel mb-3" style="border-left:3px solid var(--cyan); background:rgba(56,189,248,.05);">
-        <div class="card-panel-header" style="border:none; padding-bottom:4px;">
-          <i class="fa fa-lightbulb text-cyan me-2"></i>이 패널은 어떻게 봐야 할까?
+      <!-- 검색 바 (Splunk SPL 스타일) -->
+      <div class="spl-searchbar">
+        <span class="spl-prompt">&gt;</span>
+        <input type="text" id="siem-search" class="spl-search-input"
+               placeholder='검색: ip, 요청, 분류, source (예: /.env  또는  185.220  또는  suspicious)'
+               oninput="renderSiemEvents()" onkeydown="if(event.key==='Enter')renderSiemEvents()">
+        <select id="siem-timerange" class="spl-timerange" onchange="renderSiemEvents()">
+          <option value="0">전체 시간</option>
+          <option value="5">최근 5분</option>
+          <option value="15">최근 15분</option>
+          <option value="60">최근 1시간</option>
+        </select>
+        <button class="spl-search-btn" onclick="renderSiemEvents()"><i class="fa fa-magnifying-glass"></i></button>
+      </div>
+
+      <!-- 결과 요약 라인 -->
+      <div class="spl-resultbar">
+        <span id="siem-result-count"><b>0</b> 이벤트</span>
+        <span class="spl-sep">·</span>
+        <span class="text-danger"><b id="siem-suspicious">0</b> 의심</span>
+        <span class="spl-sep">·</span>
+        <span><b id="siem-unique-ips">0</b> 출발지 IP</span>
+        <span class="spl-sep">·</span>
+        <span><b id="siem-sources-ok">0</b> 소스 연결</span>
+        <div class="ms-auto form-check form-switch small">
+          <input class="form-check-input" type="checkbox" id="siem-suspicious-only" onchange="renderSiemEvents()">
+          <label class="form-check-label small" for="siem-suspicious-only">의심만</label>
         </div>
-        <div class="small" style="color:#e6edf3; line-height:1.7">
-          자동매매 KR / USA 프로젝트 웹서버의 access log를 실시간 수집해 통합 분석합니다.
-          TLS 프로브·HTTP/2 프로브·경로 스캔 등 <strong>의심 요청은 자동 분류</strong>되어
-          MITRE ATT&amp;CK(T1595 Active Scanning)과 공격 지도에 반영됩니다.
-          로그 파일이 없으면 데모 이벤트로 Fallback 됩니다.
+      </div>
+
+      <!-- 타임라인 히스토그램 -->
+      <div class="spl-timeline-card">
+        <div class="spl-timeline-head">
+          <i class="fa fa-chart-column text-cyan me-1"></i>타임라인 <span class="text-muted">(분당 이벤트 수 · 빨강=의심)</span>
         </div>
+        <svg id="siem-timeline" width="100%" height="110"></svg>
       </div>
 
-      <!-- KPI -->
-      <div class="row g-3 mb-3">
-        <div class="col-md-3"><div class="stat-card border-cyan">
-          <div class="stat-icon text-cyan"><i class="fa fa-file-lines"></i></div>
-          <div class="stat-value" id="siem-total">0</div>
-          <div class="stat-label">수집 이벤트</div>
-        </div></div>
-        <div class="col-md-3"><div class="stat-card border-danger">
-          <div class="stat-icon text-danger"><i class="fa fa-user-ninja"></i></div>
-          <div class="stat-value text-danger" id="siem-suspicious">0</div>
-          <div class="stat-label">의심 이벤트</div>
-        </div></div>
-        <div class="col-md-3"><div class="stat-card border-warning">
-          <div class="stat-icon text-warning"><i class="fa fa-network-wired"></i></div>
-          <div class="stat-value text-warning" id="siem-unique-ips">0</div>
-          <div class="stat-label">고유 출발지 IP</div>
-        </div></div>
-        <div class="col-md-3"><div class="stat-card border-success">
-          <div class="stat-icon text-success"><i class="fa fa-plug"></i></div>
-          <div class="stat-value text-success" id="siem-sources-ok">0</div>
-          <div class="stat-label">연결된 소스</div>
-        </div></div>
-      </div>
-
-      <div class="row g-3 mb-3">
-        <div class="col-lg-5"><div class="card-panel h-100">
-          <div class="card-panel-header"><i class="fa fa-chart-pie text-cyan me-2"></i>정상 vs 의심 요청</div>
-          <svg id="siem-donut" width="100%" height="170"></svg>
-        </div></div>
-        <div class="col-lg-7"><div class="card-panel h-100">
-          <div class="card-panel-header"><i class="fa fa-chart-simple text-cyan me-2"></i>소스별 이벤트 · 의심</div>
-          <svg id="siem-bars" width="100%" height="120"></svg>
-        </div></div>
-      </div>
-
-      <div class="row g-3">
-        <!-- 소스 상태 + TOP IP -->
-        <div class="col-lg-4">
-          <div class="card-panel mb-3">
-            <div class="card-panel-header"><i class="fa fa-database text-info me-2"></i>로그 소스</div>
-            <div class="table-responsive">
-              <table class="table table-dark table-sm mb-0">
-                <thead><tr><th>소스</th><th>이벤트</th><th>의심</th><th>상태</th></tr></thead>
-                <tbody id="siem-sources-tbody">
-                  <tr><td colspan="4" class="text-muted text-center">로딩 중...</td></tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-          <div class="card-panel">
-            <div class="card-panel-header"><i class="fa fa-user-ninja text-danger me-2"></i>TOP 출발지 IP</div>
-            <div id="siem-top-ips" style="max-height:260px; overflow-y:auto">
-              <div class="text-muted p-2">데이터 없음</div>
-            </div>
+      <div class="row g-3 mt-1">
+        <!-- 필드 사이드바 (Splunk Fields) -->
+        <div class="col-lg-3">
+          <div class="spl-fields">
+            <div class="spl-fields-head">FIELDS</div>
+            <div id="siem-fields"><div class="text-muted p-2 small">로딩 중...</div></div>
           </div>
         </div>
-        <!-- 이벤트 로그 -->
-        <div class="col-lg-8">
-          <div class="card-panel">
-            <div class="card-panel-header d-flex align-items-center">
-              <i class="fa fa-list text-cyan me-2"></i>접근 이벤트
-              <div class="form-check form-switch ms-auto small">
-                <input class="form-check-input" type="checkbox" id="siem-suspicious-only"
-                       onchange="renderSiemEvents()">
-                <label class="form-check-label small" for="siem-suspicious-only">의심만 보기</label>
-              </div>
+
+        <!-- 이벤트 스트림 (raw events) -->
+        <div class="col-lg-9">
+          <div class="spl-events">
+            <div class="spl-events-head">
+              <span><i class="fa fa-list text-cyan me-1"></i>이벤트</span>
+              <span class="ms-auto small text-muted">행 클릭 시 필드 펼치기</span>
             </div>
-            <div class="table-responsive" style="max-height:560px; overflow-y:auto">
-              <table class="table table-dark table-sm mb-0" style="font-size:12px">
-                <thead><tr><th>시각</th><th>소스</th><th>IP</th><th>요청</th><th>상태</th><th>분류</th></tr></thead>
-                <tbody id="siem-events-tbody">
-                  <tr><td colspan="6" class="text-muted text-center p-3">로딩 중...</td></tr>
-                </tbody>
-              </table>
+            <div id="siem-events" class="spl-events-body">
+              <div class="text-muted p-3 text-center small">로딩 중...</div>
             </div>
           </div>
         </div>

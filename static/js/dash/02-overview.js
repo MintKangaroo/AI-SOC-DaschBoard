@@ -143,6 +143,7 @@ const LIVE_KIND_META = {
   sigma:    { cls: 'k-sigma',    label: 'Sigma' },
 };
 
+let _liveRenderTimer = null;
 function pushLive(kind, severity, html, meta) {
   const now = new Date().toTimeString().slice(0, 8);
   _liveBuffer.unshift({
@@ -150,12 +151,18 @@ function pushLive(kind, severity, html, meta) {
     lowConf: !!(meta && meta.lowConf),   // 오탐 의심 알림 표시
   });
   while (_liveBuffer.length > LIVE_MAX) _liveBuffer.pop();
-  renderLiveStream();
+  // 이벤트 폭주 시 렉 방지 — 최대 ~3회/초로 렌더 배치
+  if (!_liveRenderTimer) {
+    _liveRenderTimer = setTimeout(() => { _liveRenderTimer = null; renderLiveStream(); }, 300);
+  }
 }
 
 function renderLiveStream() {
   const box = document.getElementById('live-stream');
   if (!box) return;
+  // 화면에 안 보이면 렌더 생략(오버뷰 패널이 숨겨져 있을 때 CPU 절약)
+  const ov = document.getElementById('panel-overview');
+  if (ov && ov.classList.contains('d-none')) return;
   const items = _liveBuffer.filter(e =>
     (_liveFilter === 'all' || e.kind === _liveFilter) &&
     (!_tpOnly || !e.lowConf));

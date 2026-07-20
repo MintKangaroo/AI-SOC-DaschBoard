@@ -86,7 +86,6 @@ function initMLCharts() {
 /* Socket 이벤트: ML 모델 준비 완료 */
 socket.on('ml_model_ready', data => {
   document.getElementById('ml-status-badge').textContent = '운영 중';
-  console.log('[ML]', data.message, data.models);
 });
 
 /* Socket 이벤트: ML 분석 결과 */

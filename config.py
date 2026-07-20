@@ -73,6 +73,10 @@ class Config:
     ALERT_RETENTION_DAYS = int(os.getenv("ALERT_RETENTION_DAYS", 90))  # N일 경과분 아카이브
     ALERT_AUTO_ARCHIVE = os.getenv("ALERT_AUTO_ARCHIVE", "False").lower() == "true"
 
+    # 데이터 보존 정리 — 로그·DB·리포트를 N일만 유지하고 자동 삭제
+    DATA_RETENTION_DAYS = int(os.getenv("DATA_RETENTION_DAYS", 3))
+    DATA_RETENTION_INTERVAL_HOURS = float(os.getenv("DATA_RETENTION_INTERVAL_HOURS", 6))
+
     # 자동화 취약점 패치 (Ansible)
     PATCH_APPLY_ENABLED = os.getenv("PATCH_APPLY_ENABLED", "False")  # 실제 적용 허용 여부
     PATCH_PLAYBOOK_DIR = os.getenv("PATCH_PLAYBOOK_DIR", "data/ansible")

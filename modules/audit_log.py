@@ -84,6 +84,21 @@ class AuditLog:
                    "target": r[4], "detail": r[5]} for r in rows]
         return result, total
 
+    def purge_older_than(self, days):
+        """N일 이전 감사 로그 영구 삭제. 삭제 건수 반환."""
+        try:
+            with self._lock:
+                cnt = self._conn.execute(
+                    "SELECT COUNT(*) FROM audit WHERE ts < datetime('now', ?, 'localtime')",
+                    (f"-{int(days)} days",)).fetchone()[0]
+                self._conn.execute(
+                    "DELETE FROM audit WHERE ts < datetime('now', ?, 'localtime')",
+                    (f"-{int(days)} days",))
+                self._conn.commit()
+            return cnt
+        except Exception:
+            return 0
+
     def labels(self):
         return dict(ACTIONS)
 

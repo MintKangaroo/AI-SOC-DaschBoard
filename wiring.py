@@ -206,6 +206,12 @@ def start_services(app, socketio):
         except Exception as e:
             print(f"[Retention] 자동 아카이브 실패: {e}")
 
+    # 데이터 보존 정리 — 로그·DB·리포트를 N일(기본 3일)만 유지하고 자동 삭제
+    from modules import retention
+    retention.start(app,
+                    days=app.config.get("DATA_RETENTION_DAYS", 3),
+                    interval_hours=app.config.get("DATA_RETENTION_INTERVAL_HOURS", 6))
+
     # ML 분석기에 패킷 통계 주기적 공급
     import threading as _t
 
