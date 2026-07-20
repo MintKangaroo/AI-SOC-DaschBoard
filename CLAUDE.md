@@ -152,6 +152,7 @@ KR/USA (logging.handlers.SysLogHandler → 127.0.0.1:5514 UDP/TCP)
 | `ALERT_ARCHIVE_RETENTION_DAYS` | 365 | 아카이브 이동 후 영구삭제까지의 보존 기간 |
 | `AUDIT_RETENTION_DAYS` | 365 | 감사 로그 보존 기간 |
 | `DATA_RETENTION_DAYS` | 30 | 파일 로그·리포트·플레이북 보존 기간(DB 제외) |
+| `VIRUSTOTAL_API_KEY` | - | 악성코드 플레이북의 MD5/SHA1/SHA256 평판 조회 |
 | `SYSLOG_ENABLED` | True | Syslog 수신기 활성 여부 |
 | `SYSLOG_BIND` | 127.0.0.1 | Syslog 수신 바인드 주소(로컬만 권장) |
 | `SYSLOG_PORT` | 5514 | Syslog 수신 포트(514는 sudo 필요) |

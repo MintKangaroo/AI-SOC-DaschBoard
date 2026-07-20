@@ -39,6 +39,7 @@ class SOAREngine:
         self.decision = None    # app.py 에서 주입 (판정 결과를 클러스터에 학습)
         self.incidents = None   # app.py 에서 주입 (정탐 → 인시던트 승격)
         self.notifier = None    # app.py 에서 주입 (정탐/차단 → 폰 푸시)
+        self.virustotal = None  # wiring 에서 주입 (악성코드 해시 평판)
         self.running = False
         self._lock = threading.Lock()
         self._queue = deque(maxlen=500)
@@ -67,6 +68,8 @@ class SOAREngine:
         self._triaged_alerts = set()       # 알림별 AI 트리아지 1회 제한
         self._ai_calls = deque(maxlen=50)  # AI 호출 타임스탬프 (rate limit)
         self._siem_probe_counter = Counter()
+        self.executions = deque(maxlen=100)
+        self._execution_id = 0
 
         self.stats = {
             "total_actions": 0,
@@ -98,6 +101,9 @@ class SOAREngine:
              "enabled": True, "runs": 0, "last_run": None},
             {"id": "PB-CORRELATED-ESCALATE", "name": "상관관계 발동 에스컬레이션",
              "description": "SIEM 상관관계 규칙(다중벡터·스캔→침투 등) 발동 → 인시던트 승격",
+             "enabled": True, "runs": 0, "last_run": None},
+            {"id": "PB-MALWARE-ENRICH", "name": "악성코드 VirusTotal 강화",
+             "description": "악성코드·EDR·Sigma 알림의 해시를 추출해 VirusTotal 기존 분석 결과로 보강(파일 업로드 안 함)",
              "enabled": True, "runs": 0, "last_run": None},
         ]
 
@@ -167,6 +173,9 @@ class SOAREngine:
                            key=lambda kv: kv[1]["timestamp"], reverse=True)
                 ],
                 "actions": list(reversed(list(self.actions)))[:50],
+                "executions": [dict(e) for e in list(self.executions)[:30]],
+                "virustotal": self.virustotal.status() if self.virustotal else
+                              {"active": False, "mode": "hash_lookup_only", "uploads": False},
             }
 
     def toggle_playbook(self, pb_id):
@@ -236,6 +245,10 @@ class SOAREngine:
 
         threat_type = alert.get("threat_type")
 
+        if (self._pb_enabled("PB-MALWARE-ENRICH") and
+                threat_type in ("MALWARE_BEACON", "EDR_THREAT", "SIGMA_MATCH")):
+            self._process_malware_enrichment(alert)
+
         # PB-BRUTE-BLOCK: AI 없이도 즉시 차단 (명백한 케이스)
         if (self._pb_enabled("PB-BRUTE-BLOCK") and self.auto_block
                 and threat_type == "BRUTE_FORCE"
@@ -267,10 +280,20 @@ class SOAREngine:
             conf = alert.get("confidence") or 0.5
             verdict = conf >= 0.7
             detail = f"AI 예산 초과 — 규칙 기반 판정(신뢰도 {conf:.2f})"
-            self._apply_triage(alert, verdict, int(conf * 100), detail, ai=False)
+            self._pb_counter("PB-AI-TRIAGE")
+            run_id = self._execution_start("PB-AI-TRIAGE", f"알림 #{alert_id}")
+            self._execution_step(run_id, "intake", "completed")
+            self._execution_step(run_id, "enrich", "completed", "탐지 신뢰도·위협그룹 prior 적용")
+            self._execution_step(run_id, "ai", "skipped", "AI 호출 예산 초과")
+            self._apply_triage(alert, verdict, int(conf * 100), detail, ai=False,
+                               execution_id=run_id)
             return
 
-        self._pb_run("PB-AI-TRIAGE")
+        self._pb_counter("PB-AI-TRIAGE")
+        run_id = self._execution_start("PB-AI-TRIAGE", f"알림 #{alert_id}")
+        self._execution_step(run_id, "intake", "completed")
+        self._execution_step(run_id, "enrich", "completed", "IP 평판·위협그룹 prior 적용")
+        self._execution_step(run_id, "ai", "running", "Claude 분석 요청")
         self._ai_calls.append(time.time())
         entry = self.ai.analyze_alert(alert, async_mode=False)
         result = (entry or {}).get("result", {})
@@ -280,12 +303,16 @@ class SOAREngine:
         with self._lock:
             self.stats["ai_triages"] += 1
         if verdict is None:
+            self._execution_step(run_id, "ai", "failed", "판정 결과 없음")
+            self._execution_finish(run_id, "failed")
             self._log_action("PB-AI-TRIAGE", "triage", f"알림 #{alert_id}",
                              "inconclusive", "AI 판정 불가 — 수동 검토 필요")
             return
-        self._apply_triage(alert, verdict, confidence, summary, ai=True)
+        self._execution_step(run_id, "ai", "completed", f"신뢰도 {confidence}%")
+        self._apply_triage(alert, verdict, confidence, summary, ai=True,
+                           execution_id=run_id)
 
-    def _apply_triage(self, alert, is_tp, confidence, summary, ai=True):
+    def _apply_triage(self, alert, is_tp, confidence, summary, ai=True, execution_id=None):
         alert_id = alert.get("id")
         src_ip = alert.get("src_ip")
         who = "AI" if ai else "규칙"
@@ -298,6 +325,8 @@ class SOAREngine:
                 pass
 
         if not is_tp:
+            if execution_id:
+                self._execution_step(execution_id, "verdict", "running", "오탐 자동 종결")
             # 오탐 → 자동 종결 (+ AI 경로는 ML 피드백이 ai_analyst 에서 자동 반영)
             if self.threat_detector:
                 self.threat_detector.update_alert_status(
@@ -310,6 +339,10 @@ class SOAREngine:
                 self.stats["auto_closed_fp"] += 1
             self._log_action("PB-AI-TRIAGE", "auto_close", f"알림 #{alert_id}",
                              "success", f"{who} 오탐 판정({confidence}%) → 자동 종결")
+            if execution_id:
+                self._execution_step(execution_id, "verdict", "completed")
+                self._execution_step(execution_id, "notify", "skipped", "오탐은 통보하지 않음")
+                self._execution_finish(execution_id, "completed")
             return
 
         # 정탐 → 에스컬레이션 (ACK + 메모)
@@ -324,6 +357,9 @@ class SOAREngine:
             self.stats["escalated_tp"] += 1
         self._log_action("PB-AI-TRIAGE", "escalate", f"알림 #{alert_id}",
                          "success", f"{who} 정탐 판정({confidence}%) → 에스컬레이션")
+        if execution_id:
+            self._execution_step(execution_id, "verdict", "completed", "정탐 ACK·에스컬레이션")
+            self._execution_step(execution_id, "notify", "running", "인시던트 승격·통보")
 
         # 정탐 확정 → 폰 푸시 (오탐은 보내지 않음)
         if self.notifier:
@@ -350,6 +386,44 @@ class SOAREngine:
             self._block_ip(src_ip,
                            f"{who} 정탐 CRITICAL (알림 #{alert_id}, {confidence}%)",
                            playbook="PB-AUTO-BLOCK")
+        if execution_id:
+            self._execution_step(execution_id, "notify", "completed")
+            self._execution_finish(execution_id, "completed")
+
+    def _process_malware_enrichment(self, alert):
+        run_id = self._execution_start("PB-MALWARE-ENRICH", f"알림 #{alert.get('id')}")
+        self._pb_counter("PB-MALWARE-ENRICH")
+        self._execution_step(run_id, "intake", "completed")
+        details = alert.get("details") or {}
+        candidates = [alert.get("hash"), alert.get("sha256"), details.get("hash"),
+                      details.get("sha256"), details.get("sha1"), details.get("md5")]
+        value = next((str(v) for v in candidates if v), None)
+        if not value:
+            self._execution_step(run_id, "hash", "skipped", "알림에 해시 없음")
+            self._execution_step(run_id, "vt", "skipped", "조회 대상 없음")
+            self._execution_step(run_id, "verdict", "skipped")
+            self._execution_step(run_id, "handoff", "completed", "기존 AI 트리아지 계속")
+            self._execution_finish(run_id, "completed")
+            return
+        self._execution_step(run_id, "hash", "completed", value)
+        self._execution_step(run_id, "vt", "running")
+        result = self.virustotal.lookup_hash(value) if self.virustotal else {
+            "ok": False, "status": "not_configured", "hash": value}
+        if result.get("ok"):
+            detail = (f"{result.get('verdict')} · malicious {result.get('malicious', 0)} · "
+                      f"suspicious {result.get('suspicious', 0)}")
+            self._execution_step(run_id, "vt", "completed", detail)
+            self._execution_step(run_id, "verdict", "completed", result.get("verdict"))
+            alert.setdefault("details", {})["virustotal"] = result
+            self._log_action("PB-MALWARE-ENRICH", "vt_lookup", value,
+                             "success", detail)
+        else:
+            status = result.get("status", "error")
+            state = "skipped" if status == "not_configured" else "failed"
+            self._execution_step(run_id, "vt", state, status)
+            self._execution_step(run_id, "verdict", "skipped")
+        self._execution_step(run_id, "handoff", "completed", "AI 트리아지에 결과 전달")
+        self._execution_finish(run_id, "completed")
 
     def _process_siem(self, event):
         if not (self._pb_enabled("PB-SIEM-SCANNER") and self.auto_block):
@@ -469,11 +543,66 @@ class SOAREngine:
             return any(p["id"] == pb_id and p["enabled"] for p in self.playbooks)
 
     def _pb_run(self, pb_id):
+        """짧은 동기 플레이북 실행을 완료 흐름으로 기록한다."""
+        self._pb_counter(pb_id)
+        run_id = self._execution_start(pb_id, "자동 트리거")
+        for step in steps_for(pb_id):
+            self._execution_step(run_id, step["key"], "completed")
+        self._execution_finish(run_id, "completed")
+        return run_id
+
+    def _pb_counter(self, pb_id):
         with self._lock:
             for p in self.playbooks:
                 if p["id"] == pb_id:
                     p["runs"] += 1
                     p["last_run"] = datetime.now().strftime("%H:%M:%S")
+
+    def _execution_start(self, pb_id, target):
+        steps = [{**s, "status": "pending", "detail": "", "updated": None}
+                 for s in steps_for(pb_id)]
+        with self._lock:
+            self._execution_id += 1
+            entry = {"id": self._execution_id, "playbook": pb_id, "target": target,
+                     "status": "running", "started": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                     "finished": None, "current_step": steps[0]["key"] if steps else None,
+                     "steps": steps}
+            self.executions.appendleft(entry)
+        self._emit_execution(entry)
+        return entry["id"]
+
+    def _execution_step(self, run_id, key, status, detail=""):
+        with self._lock:
+            entry = next((e for e in self.executions if e["id"] == run_id), None)
+            if not entry:
+                return
+            for step in entry["steps"]:
+                if step["key"] == key:
+                    step["status"] = status
+                    step["detail"] = str(detail or "")[:300]
+                    step["updated"] = datetime.now().strftime("%H:%M:%S")
+                    break
+            entry["current_step"] = key if status == "running" else next(
+                (s["key"] for s in entry["steps"] if s["status"] == "pending"), None)
+            snapshot = {**entry, "steps": [dict(s) for s in entry["steps"]]}
+        self._emit_execution(snapshot)
+
+    def _execution_finish(self, run_id, status):
+        with self._lock:
+            entry = next((e for e in self.executions if e["id"] == run_id), None)
+            if not entry:
+                return
+            entry["status"] = status
+            entry["current_step"] = None
+            entry["finished"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            snapshot = {**entry, "steps": [dict(s) for s in entry["steps"]]}
+        self._emit_execution(snapshot)
+
+    def _emit_execution(self, entry):
+        try:
+            self.socketio.emit("soar_execution", entry)
+        except Exception:
+            pass
 
     def _ai_budget_ok(self):
         now = time.time()

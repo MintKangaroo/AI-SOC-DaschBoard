@@ -86,6 +86,13 @@ function renderSoar(d) {
     pbBox.innerHTML = (d.playbooks || []).map(renderPlaybookCard).join('');
   }
 
+  const vt = d.virustotal || {};
+  const vtEl = document.getElementById('soar-vt-status');
+  if (vtEl) vtEl.innerHTML = vt.active
+    ? '<span class="badge bg-success">VirusTotal 연결됨 · 해시 조회 전용</span>'
+    : '<span class="badge bg-secondary">VirusTotal API 키 미설정</span>';
+  renderSoarExecutions(d.executions || []);
+
   // 차단 IP 목록
   const blBox = document.getElementById('soar-blocklist');
   if (blBox) {
@@ -113,6 +120,36 @@ function renderSoar(d) {
     tbody.innerHTML = rows || '<tr><td colspan="6" class="text-muted text-center p-3">아직 대응 이력 없음</td></tr>';
   }
 }
+
+const SOAR_RUN_STATE = {pending:'대기', running:'진행 중', completed:'완료',
+                        skipped:'건너뜀', failed:'실패'};
+function renderSoarExecutions(runs) {
+  const box = document.getElementById('soar-executions');
+  if (!box) return;
+  box.innerHTML = runs.length ? runs.slice(0, 12).map(run => `
+    <div class="soar-run">
+      <div class="d-flex align-items-center gap-2 small">
+        <span class="pb-tag">${escapeHtml(run.playbook)}</span>
+        <strong style="color:#e6edf3">${escapeHtml(run.target)}</strong>
+        <span class="ms-auto badge ${run.status === 'running' ? 'bg-info text-dark' : run.status === 'failed' ? 'bg-danger' : 'bg-success'}">${escapeHtml(SOAR_RUN_STATE[run.status] || run.status)}</span>
+        <span class="text-muted font-monospace" style="font-size:9px">${escapeHtml((run.started || '').split(' ')[1] || '')}</span>
+      </div>
+      <div class="soar-run-steps">${(run.steps || []).map(step => `
+        <div class="soar-run-step ${escapeHtml(step.status)}" title="${escapeHtml(step.detail || '')}">
+          <span class="step-state">${escapeHtml(SOAR_RUN_STATE[step.status] || step.status)}</span>
+          <span>${escapeHtml(step.label)}</span>
+          ${step.detail ? `<div class="text-truncate mt-1">${escapeHtml(step.detail)}</div>` : ''}
+        </div>`).join('')}</div>
+    </div>`).join('') : '<div class="text-muted p-3 text-center small">실행 이력 없음</div>';
+}
+
+socket.on('soar_execution', run => {
+  if (!isPanelVisible('soar')) return;
+  const runs = ((_soarStatus && _soarStatus.executions) || []).filter(r => r.id !== run.id);
+  runs.unshift(run);
+  if (_soarStatus) _soarStatus.executions = runs.slice(0, 30);
+  renderSoarExecutions(runs);
+});
 
 // 정탐(tp)/오탐(fp) 카드·숫자 클릭 → SOAR 트리아지 상세 내역 모달
 function showVerdictDetail(kind) {
@@ -167,6 +204,7 @@ const SOAR_ACTION_LABELS = {
   escalate: '<span class="badge bg-warning text-dark">에스컬레이션</span>',
   triage: '<span class="badge bg-info text-dark">트리아지</span>',
   incident: '<span class="badge bg-danger">인시던트</span>',
+  vt_lookup: '<span class="badge bg-purple">VirusTotal</span>',
 };
 
 function soarActionRow(a) {

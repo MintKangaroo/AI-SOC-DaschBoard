@@ -20,6 +20,12 @@ Flask 및 Flask-SocketIO 기반 실시간 SOC 대시보드다. 패킷·Sysmon·S
 
 ## 현재 검증 상태
 
+최근 추가 기능:
+
+- SOAR 플레이북 실행 인스턴스와 단계별 실시간 상태 시각화
+- VirusTotal v3 해시 평판 플레이북(`PB-MALWARE-ENRICH`, 파일 업로드 없음)
+- 계층별 데이터 보존 정책과 삭제 미리보기
+
 2026-07-20 전체 테스트 실행 결과:
 
 ```bash

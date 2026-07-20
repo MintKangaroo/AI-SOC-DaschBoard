@@ -55,6 +55,13 @@ PLAYBOOK_STEPS = {
         {"key": "escalate","label": "상관 알림 생성 → 인시던트 승격",      "kind": "contain"},
         {"key": "notify",  "label": "고위험 시 폰 통보",                  "kind": "notify"},
     ],
+    "PB-MALWARE-ENRICH": [
+        {"key": "intake", "label": "악성코드·EDR·Sigma 알림 수신", "kind": "detect"},
+        {"key": "hash", "label": "MD5/SHA1/SHA256 추출", "kind": "enrich"},
+        {"key": "vt", "label": "VirusTotal 기존 리포트 조회", "kind": "enrich"},
+        {"key": "verdict", "label": "탐지 엔진 통계로 악성도 판정", "kind": "decide"},
+        {"key": "handoff", "label": "AI 트리아지·인시던트에 결과 전달", "kind": "followup"},
+    ],
     "MANUAL": [
         {"key": "analyst", "label": "분석가 수동 조치(차단/해제)",         "kind": "contain"},
         {"key": "log",     "label": "감사 로그 기록",                     "kind": "followup"},

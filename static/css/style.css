@@ -342,6 +342,18 @@ html, body {
 .priority-item .priority-meta { color: var(--muted); font-size: 10px; }
 .priority-item .priority-count { align-self: center; font-size: 12px; color: var(--orange); }
 
+/* SOAR 실행 단계 실시간 시각화 */
+.soar-executions { max-height: 360px; overflow-y: auto; }
+.soar-run { padding: 10px 8px; border-bottom: 1px solid var(--border); }
+.soar-run:last-child { border-bottom: 0; }
+.soar-run-steps { display: flex; gap: 5px; align-items: stretch; overflow-x: auto; padding-top: 7px; }
+.soar-run-step { min-width: 100px; flex: 1; padding: 6px; border: 1px solid var(--border); border-radius: 5px; font-size: 9px; color: var(--muted); }
+.soar-run-step.completed { border-color: #3fb950; color: #b7e4c1; background: rgba(63,185,80,.09); }
+.soar-run-step.running { border-color: var(--cyan); color: #e6edf3; background: rgba(57,208,216,.13); box-shadow: 0 0 10px rgba(57,208,216,.2); }
+.soar-run-step.failed { border-color: var(--red); color: #ffb3ad; background: rgba(248,81,73,.1); }
+.soar-run-step.skipped { opacity: .55; border-style: dashed; }
+.soar-run-step .step-state { display:block; font-size:8px; text-transform:uppercase; margin-bottom:2px; }
+
 /* Leaflet dark cyber-globe override */
 .leaflet-container {
   background: radial-gradient(ellipse at center, #0b1e3a 0%, #020615 70%, #000 100%) !important;

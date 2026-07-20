@@ -33,6 +33,7 @@ from modules.honeypot import Honeypot
 from modules.siem_correlation import SIEMCorrelator
 from modules.audit_log import AuditLog
 from modules.watchlist import Watchlist
+from modules.virustotal import VirusTotalClient
 
 
 def build_services(app, socketio):
@@ -46,6 +47,7 @@ def build_services(app, socketio):
                                      threat_detector=threat_detector)
     sysmon_parser   = SysmonParser(socketio, app.config, mitre_tracker=mitre_tracker)
     hash_checker    = HashChecker(app.config.get("MALICIOUS_HASH_DB"))
+    virustotal      = VirusTotalClient(app.config)
     ml_analyst      = MLAnalyst(socketio)
     ai_analyst      = AIAnalyst(socketio, ml_analyst=ml_analyst)
     threat_intel    = ThreatIntel(socketio, packet_analyzer=packet_analyzer,
@@ -67,6 +69,7 @@ def build_services(app, socketio):
 
     soar = SOAREngine(socketio, app.config, ai_analyst=ai_analyst,
                       ml_analyst=ml_analyst, threat_detector=threat_detector)
+    soar.virustotal = virustotal
     threat_detector.soar = soar
     siem_collector.soar  = soar
     threat_intel.soar    = soar
@@ -147,6 +150,7 @@ def build_services(app, socketio):
     app.threat_detector = threat_detector
     app.sysmon_parser   = sysmon_parser
     app.hash_checker    = hash_checker
+    app.virustotal      = virustotal
     app.ai_analyst      = ai_analyst
     app.ml_analyst      = ml_analyst
     app.attack_map      = attack_map

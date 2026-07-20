@@ -52,6 +52,11 @@ class Config:
     ABUSEIPDB_CACHE_HOURS = float(os.getenv("ABUSEIPDB_CACHE_HOURS", 6))
     ABUSEIPDB_MIN_SCORE = int(os.getenv("ABUSEIPDB_MIN_SCORE", 75))  # 이 점수↑ = 악성
 
+    # VirusTotal v3 — 파일 업로드 없이 MD5/SHA1/SHA256 기존 리포트 조회
+    VIRUSTOTAL_API_KEY = os.getenv("VIRUSTOTAL_API_KEY", "")
+    VIRUSTOTAL_TIMEOUT = float(os.getenv("VIRUSTOTAL_TIMEOUT", 8))
+    VIRUSTOTAL_CACHE_HOURS = float(os.getenv("VIRUSTOTAL_CACHE_HOURS", 6))
+
     # EDR (엔드포인트 탐지·대응) — AI 기반 프로세스 행위 관제
     EDR_SCAN_INTERVAL = float(os.getenv("EDR_SCAN_INTERVAL", 5))
     EDR_RESPONSE_MODE = os.getenv("EDR_RESPONSE_MODE", "simulate")  # simulate | kill

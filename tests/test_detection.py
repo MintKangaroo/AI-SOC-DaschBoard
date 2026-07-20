@@ -19,6 +19,7 @@ from modules.decision_support import DecisionSupport
 from modules.incidents import IncidentManager
 from modules.auth import AuthManager
 from modules.authlog_parser import AuthLogMonitor
+from modules.virustotal import VirusTotalClient
 
 
 class FakeSocketIO:
@@ -305,6 +306,36 @@ def test_soar_playbook_toggle(tmp_path):
     assert soar.toggle_playbook("PB-IOC-BLOCK") is False
     soar._process_ti({"kind": "ip", "indicator": "1.2.3.4", "description": "x"})
     assert "1.2.3.4" not in soar.blocked_ips
+
+
+def test_virustotal_hash_lookup_parses_stats(monkeypatch):
+    class Response:
+        status_code = 200
+        def raise_for_status(self): pass
+        def json(self):
+            return {"data": {"attributes": {"sha256": "a" * 64,
+                "meaningful_name": "sample.exe", "type_description": "Win32 EXE",
+                "last_analysis_stats": {"malicious": 12, "suspicious": 2,
+                                        "harmless": 4, "undetected": 50}}}}
+    monkeypatch.setattr("modules.virustotal.requests.get", lambda *a, **k: Response())
+    vt = VirusTotalClient({"VIRUSTOTAL_API_KEY": "test"})
+    result = vt.lookup_hash("a" * 64)
+    assert result["ok"] and result["verdict"] == "MALICIOUS"
+    assert result["malicious"] == 12
+
+
+def test_soar_malware_playbook_tracks_steps(tmp_path):
+    soar = make_soar(tmp_path)
+    soar.virustotal = VirusTotalClient({})
+    soar._process_malware_enrichment({"id": 7, "threat_type": "EDR_THREAT",
+                                      "details": {"sha256": "a" * 64}})
+    run = soar.get_status()["executions"][0]
+    assert run["playbook"] == "PB-MALWARE-ENRICH"
+    assert run["status"] == "completed"
+    states = {s["key"]: s["status"] for s in run["steps"]}
+    assert states["hash"] == "completed"
+    assert states["vt"] == "skipped"
+    assert states["handoff"] == "completed"
 
 
 def test_soar_block_ttl_expiry(tmp_path):
