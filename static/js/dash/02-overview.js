@@ -53,24 +53,26 @@ socket.on('packet_update', data => {
   document.getElementById('stat-pps').textContent = s.packets_per_sec.toLocaleString();
   document.getElementById('stat-total-packets').textContent = s.total_packets.toLocaleString();
 
-  // 미니 차트 갱신
-  const hist = data.traffic_history || [];
-  miniTrafficChart.data.labels = hist.map(h => h.time);
-  miniTrafficChart.data.datasets[0].data = hist.map(h => h.pps);
-  miniTrafficChart.update('none');
+  if (isPanelVisible('overview')) {
+    // 미니 차트 갱신
+    const hist = data.traffic_history || [];
+    miniTrafficChart.data.labels = hist.map(h => h.time);
+    miniTrafficChart.data.datasets[0].data = hist.map(h => h.pps);
+    miniTrafficChart.update('none');
 
-  // 프로토콜 차트
-  const pd = data.protocol_dist || {};
-  protoChart.data.labels = Object.keys(pd);
-  protoChart.data.datasets[0].data = Object.values(pd);
-  protoChart.data.datasets[0].backgroundColor = Object.keys(pd).map(protoColor);
-  protoChart.update('none');
+    // 프로토콜 차트
+    const pd = data.protocol_dist || {};
+    protoChart.data.labels = Object.keys(pd);
+    protoChart.data.datasets[0].data = Object.values(pd);
+    protoChart.data.datasets[0].backgroundColor = Object.keys(pd).map(protoColor);
+    protoChart.update('none');
+  }
 
   // 패킷 테이블 (패킷 패널)
-  updatePacketsTable(data.recent_packets || []);
+  if (isPanelVisible('packets')) updatePacketsTable(data.recent_packets || []);
 
   // 트래픽 패널 차트
-  updateTrafficCharts(data);
+  if (isPanelVisible('traffic')) updateTrafficCharts(data);
 });
 
 /* ─────────── Socket: 위협 알림 ─────────── */
@@ -303,8 +305,8 @@ socket.on('sysmon_update', data => {
   document.getElementById('sys-total').textContent = s.total_events.toLocaleString();
   document.getElementById('sys-suspicious').textContent = s.suspicious_events;
   document.getElementById('sys-critical').textContent = s.critical_events;
-  updateSysmonTable(data.recent_events || []);
-  renderOverviewSysmon(data.recent_events || []);
+  if (isPanelVisible('sysmon')) updateSysmonTable(data.recent_events || []);
+  if (isPanelVisible('overview')) renderOverviewSysmon(data.recent_events || []);
 });
 
 function renderOverviewSysmon(events) {
@@ -347,4 +349,3 @@ socket.on('map_attack', entry => {
   prependAttackLog(entry);
   updateCountryChart(entry.src_country);
 });
-

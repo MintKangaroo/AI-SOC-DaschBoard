@@ -45,6 +45,14 @@ function threatColor(t) {
   return m[t] || '#8b949e';
 }
 
+/* 실시간 이벤트는 모든 패널에 도착한다. 숨겨진 패널·백그라운드 탭의
+   무거운 차트/테이블 렌더를 생략해 장시간 실행 시 브라우저 부하를 줄인다. */
+function isPanelVisible(name) {
+  if (document.hidden) return false;
+  const panel = document.getElementById('panel-' + name);
+  return !!panel && !panel.classList.contains('d-none');
+}
+
 /* ─────────────────── 모바일 사이드바 드로어 ─────────────────── */
 function toggleSidebar() {
   const sb = document.getElementById('sidebar');
@@ -285,4 +293,3 @@ setInterval(() => {
   document.getElementById('current-time').textContent =
     new Date().toLocaleString('ko-KR', { hour12: false });
 }, 1000);
-

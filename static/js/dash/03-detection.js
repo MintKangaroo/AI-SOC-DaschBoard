@@ -60,10 +60,19 @@ function prependAlertRow(alert, prepend = true) {
       <button class="btn btn-xs btn-outline-warning me-1" onclick="updateAlertStatus(${alert.id},'ACK')">확인</button>
       <button class="btn btn-xs btn-outline-secondary" onclick="updateAlertStatus(${alert.id},'CLOSED')">종료</button>
     </td>`;
-  if (prepend && tbody.firstChild) {
-    tbody.insertBefore(row, tbody.firstChild);
+  // 실시간 이벤트가 장시간 누적되어 DOM/DataTables가 느려지는 것을 방지한다.
+  // DataTables가 관리 중이면 API를 통해, 초기화 전이면 DOM에서 직접 제거한다.
+  const maxRows = 200;
+  if (alertsDataTable) {
+    alertsDataTable.row.add(row);
+    while (alertsDataTable.rows().count() > maxRows) {
+      alertsDataTable.row(':last').remove();
+    }
+    alertsDataTable.draw(false);
   } else {
-    tbody.appendChild(row);
+    if (prepend && tbody.firstChild) tbody.insertBefore(row, tbody.firstChild);
+    else tbody.appendChild(row);
+    while (tbody.children.length > maxRows) tbody.removeChild(tbody.lastChild);
   }
 }
 
@@ -259,6 +268,8 @@ function updateTrafficCharts(data) {
 /* ════════════════════ SYSMON 테이블 ════════════════════ */
 let sysmonInit = false;
 let sysmonDT = null;
+const _seenSysmonEvents = new Set();
+const _seenSysmonOrder = [];
 
 function initSysmonTable() {
   if (!sysmonInit) {
@@ -276,6 +287,14 @@ function updateSysmonTable(events, highlight = false) {
   const tbody = document.getElementById('sysmon-tbody');
   if (!tbody) return;
   events.forEach(ev => {
+    // 서버는 최근 20건을 반복 전송하므로 동일 이벤트를 다시 붙이지 않는다.
+    const key = [ev.timestamp, ev.event_id, ev.process || '', ev.message || ''].join('|');
+    if (_seenSysmonEvents.has(key)) return;
+    _seenSysmonEvents.add(key);
+    _seenSysmonOrder.push(key);
+    while (_seenSysmonOrder.length > 500) {
+      _seenSysmonEvents.delete(_seenSysmonOrder.shift());
+    }
     const row = document.createElement('tr');
     row.style.color = '#e6edf3';
     if (ev.suspicious || highlight) row.style.background = 'rgba(248,81,73,.08)';
@@ -511,4 +530,3 @@ function updateCountryChart(country) {
     countryChart.update('none');
   }
 }
-

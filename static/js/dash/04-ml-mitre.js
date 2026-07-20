@@ -90,8 +90,10 @@ socket.on('ml_model_ready', data => {
 
 /* Socket 이벤트: ML 분석 결과 */
 socket.on('ml_analysis', data => {
-  updateMLDisplay(data);
-  appendMLLog(data);
+  if (isPanelVisible('ml')) {
+    updateMLDisplay(data);
+    appendMLLog(data);
+  }
   updateOverviewML(data);
 });
 
@@ -490,4 +492,3 @@ function showTechniqueDetail(techId) {
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
-
