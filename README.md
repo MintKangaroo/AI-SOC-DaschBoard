@@ -1,12 +1,22 @@
-# SOC 보안관제 대시보드
+# AI 기반 SOC 보안관제 대시보드
 
 > Flask 기반 **실시간 보안관제(SOC) 플랫폼** — 운영 중인 자동매매 홈서버(KR·USA)를 대상으로
 > 침해 시도를 실시간 관제하고, AI로 **정탐(True Positive)과 오탐(False Positive)을 구분**하며,
 > 탐지부터 자동대응(SOAR)·취약점 관리까지 SOC 업무 흐름을 하나의 대시보드로 구현했습니다.
 
+![Python](https://img.shields.io/badge/Python-3.10+-3776AB?logo=python&logoColor=white)
+![Flask](https://img.shields.io/badge/Flask-SocketIO-000000?logo=flask&logoColor=white)
+![Claude AI](https://img.shields.io/badge/AI-Claude-D97757)
+![Tests](https://img.shields.io/badge/tests-153_passing-3fb950)
+![License](https://img.shields.io/badge/license-MIT-blue)
+
 실제 SOC 운영 개념(SIEM · SOAR · EDR · Threat Intelligence · Detection Engineering ·
-Vulnerability Management · Purple Team · SOC Metrics)을 32개 모듈 / 약 11,000 LOC로 구현한 **개인 학습·포트폴리오 프로젝트**입니다.
+Vulnerability Management · Purple Team · SOC Metrics)을 **34개 모듈 / 약 11,000 LOC**로 구현한 **개인 학습·포트폴리오 프로젝트**입니다.
 모든 모듈은 **데모 fallback**을 갖춰 실제 센서(Npcap·Sysmon·nmap·ansible 등) 없이도 전체 기능이 동작합니다.
+
+![AI 관제 센터](docs/portfolio_img/01-overview.png)
+
+> 📸 **화면 중심 소개는 [docs/PORTFOLIO.md](docs/PORTFOLIO.md)** 에서 12개 패널을 스크린샷으로 볼 수 있습니다.
 
 ---
 
@@ -22,6 +32,7 @@ SOC의 실무 난제는 알림 홍수 속에서 **진짜 위협만 골라내는 
 | **ML 피드백 루프** | `ml_analyst` Q-Learning — FP 버튼 → 보상 → 임계값 자동 튜닝 | 운영하며 스스로 정밀도 향상 |
 | **퍼플팀 회귀검증** | `purple_team` — 7종 모의공격을 실제 탐지엔진에 주입 | 룰 변경 후 탐지 커버리지 검증 |
 | **킬체인 상관관계** | `correlation` — 산발적 알림을 같은 출발지·MITRE 전술 순서로 캠페인화 | 다단계 공격을 단건 알림에 묻히지 않게 |
+| **허니팟** | `honeypot` — 유인 서비스 접촉은 오탐이 거의 없는 고신뢰 침해지표 | 진짜 공격자를 확실하게 식별 |
 | **SOC 운영 지표** | `soc_metrics` — MTTD/MTTR/MTTA·오탐율·처리량 계량 | 관제 성숙도를 수치로 관리 |
 
 ---
@@ -87,6 +98,8 @@ flowchart LR
 - **패킷 분석** — PyShark 캡처, Scapy 조작, pps/bps·Top Talkers (`packet_analyzer`)
 - **Sysmon** — 프로세스 생성·네트워크·자격증명 접근 이벤트 (`sysmon_parser`)
 - **네트워크 관제** — 활성 연결·리스닝 포트·대역폭, 서비스 헬스체크 (`net_monitor`)
+- **Syslog 수신** — 원격 서버(자동매매 KR/USA)의 접속 시도를 UDP/TCP로 실시간 수집·분류 (`syslog_receiver`)
+- **허니팟** — SSH/Telnet/MySQL/Redis 등 유인 서비스 리스너, 접촉=고신뢰 침해지표 (`honeypot`)
 
 ### ② 탐지 · Detection Engineering
 - **위협 탐지** — DDoS · 포트스캔 · 악성코드 C2, 신뢰도 스코어링 (`threat_detector`)
@@ -148,7 +161,7 @@ flowchart LR
 - **AI** — Anthropic Claude API(비동기 큐) · 자체 IF/RF/LSTM/Q-Learning
 - **자동화** — Ansible(ad-hoc·플레이북) · ntfy
 - **프론트** — Bootstrap 5 · Chart.js · 순수 SVG 시각화 · Leaflet · Socket.IO
-- **테스트** — pytest **142개** (탐지·SOAR·인증·스캐너·퍼저·안전장치)
+- **테스트** — pytest **153개** (탐지·SOAR·인증·스캐너·퍼저·안전장치)
 
 ---
 
@@ -190,7 +203,7 @@ SOC_DashBoard/
 ├── app.py                    # Flask 앱 팩토리 · SocketIO 이벤트
 ├── wiring.py                 # 서비스 생성·교차배선·시작(build/start_services)
 ├── config.py                 # 환경변수 기반 설정
-├── modules/                  # 32개 관제 모듈 (SOC 도메인별)
+├── modules/                  # 34개 관제 모듈 (SOC 도메인별)
 │   ├── 수집    access_log_parser · authlog_parser · packet_analyzer · sysmon_parser · net_monitor
 │   ├── 탐지    threat_detector · sigma_engine · edr · hash_checker · mitre_attack
 │   ├── 인텔    ip_reputation · threat_intel · watchlist · correlation · ml_analyst · ai_analyst · decision_support
@@ -203,7 +216,7 @@ SOC_DashBoard/
 │   ├── dashboard.html        # 레이아웃·사이드바
 │   └── panels/               # 패널별 UI 조각 (29개, Jinja include)
 ├── static/js/dash/           # 패널별 JS (01~14, 순서대로 로드)
-├── tests/                    # pytest 142개
+├── tests/                    # pytest 153개
 ├── data/                     # 모델·룰·리포트·해시 DB
 └── docs/                     # 상세 문서
 ```

@@ -9,3 +9,13 @@ data/reports/
 data/*.log
 data/audit.db
 data/watchlist.db
+# 런타임 산출물 (자동 생성/영속화 — 재실행 시 재생성)
+data/blocklist.txt
+data/incidents.json
+data/ansible/
+data/models/
+# 이전 세션 포트폴리오 잔재 (docs/PORTFOLIO.md 로 통합됨)
+portfolio/
+docs/portfolio.md
+# 스크린샷/브라우저 도구 임시물
+scratchpad/
