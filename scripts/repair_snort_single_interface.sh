@@ -34,6 +34,11 @@ systemctl stop snort || true
 # 구형 init 스크립트가 남긴 고아 프로세스만 정확한 실행 파일명으로 종료한다.
 pkill -x snort || true
 sleep 1
+# Snort 2 데몬이 SIGTERM을 무시하고 남는 경우 시작 전에 강제 정리한다.
+if pgrep -x snort >/dev/null; then
+  pkill -9 -x snort
+  sleep 1
+fi
 systemctl reset-failed snort || true
 systemctl start snort
 

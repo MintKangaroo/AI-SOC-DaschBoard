@@ -29,6 +29,7 @@ Flask 및 Flask-SocketIO 기반 실시간 SOC 대시보드다. 패킷·Sysmon·S
 - Ubuntu Snort 2의 실제 fast 로그는 `/var/log/snort/snort.alert.fast`다. 설치기가
   전체 인터페이스를 선택한 경우 `scripts/repair_snort_single_interface.sh`로
   `eth0` 단일 센서와 `HOME_NET=172.23.160.0/20`으로 교정한다.
+  Snort 2가 일반 종료 신호를 무시하면 시작 전에 남은 데몬을 강제 정리한다.
 - 2026-07-21 측정 용량: 프로젝트 638MB(venv 493MB), 운영 데이터 111MB.
   alerts.db 60MB, SOAR DB+WAL 약 23MB, incidents.json+백업 약 22MB.
 - 대시보드 렉 최적화: 브라우저별 AI 중복 분석 제거, 숨은 탭 렌더 중단,
