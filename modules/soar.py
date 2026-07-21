@@ -23,6 +23,7 @@ from datetime import datetime
 from collections import deque, Counter
 
 from modules.playbooks import steps_for
+from modules.soar_execution_store import SOARExecutionStore
 
 
 class SOAREngine:
@@ -30,7 +31,8 @@ class SOAREngine:
     AI_TRIAGE_WINDOW = 300.0
 
     def __init__(self, socketio, config=None, ai_analyst=None, ml_analyst=None,
-                 threat_detector=None, blocklist_path="data/blocklist.txt"):
+                 threat_detector=None, blocklist_path="data/blocklist.txt",
+                 execution_db_path=None):
         self.socketio = socketio
         self.config = config or {}
         self.ai = ai_analyst
@@ -68,8 +70,12 @@ class SOAREngine:
         self._triaged_alerts = set()       # 알림별 AI 트리아지 1회 제한
         self._ai_calls = deque(maxlen=50)  # AI 호출 타임스탬프 (rate limit)
         self._siem_probe_counter = Counter()
-        self.executions = deque(maxlen=100)
-        self._execution_id = 0
+        execution_db_path = execution_db_path or os.path.join(
+            os.path.dirname(blocklist_path) or "data", "soar_executions.db")
+        self.execution_store = SOARExecutionStore(execution_db_path)
+        restored = self.execution_store.load_recent(100)
+        self.executions = deque(restored, maxlen=100)
+        self._execution_id = max((e.get("id", 0) for e in restored), default=0)
 
         self.stats = {
             "total_actions": 0,
@@ -213,6 +219,19 @@ class SOAREngine:
             "id": "VT-TEST", "threat_type": "MALWARE_BEACON",
             "severity": "HIGH", "details": {"sha256": hash_value},
         }, persist=False)
+
+    def retry_execution(self, execution_id):
+        """실패한 읽기 전용 강화 실행을 새 실행으로 재개한다."""
+        entry, context = self.execution_store.get(execution_id)
+        if not entry:
+            return {"ok": False, "status": "not_found"}
+        if entry.get("status") != "failed":
+            return {"ok": False, "status": "not_failed"}
+        if entry.get("playbook") != "PB-MALWARE-ENRICH" or not context.get("hash"):
+            return {"ok": False, "status": "not_retryable"}
+        return self._run_malware_lookup(context["hash"], alert_id=context.get("alert_id"),
+                                        persist=context.get("persist", False),
+                                        retry_of=execution_id)
 
     # ------------------------------------------------------------------ #
     #  워커 루프
@@ -398,20 +417,32 @@ class SOAREngine:
             self._execution_finish(execution_id, "completed")
 
     def _process_malware_enrichment(self, alert, persist=True):
-        run_id = self._execution_start("PB-MALWARE-ENRICH", f"알림 #{alert.get('id')}")
-        self._pb_counter("PB-MALWARE-ENRICH")
-        self._execution_step(run_id, "intake", "completed")
         details = alert.get("details") or {}
         candidates = [alert.get("hash"), alert.get("sha256"), details.get("hash"),
                       details.get("sha256"), details.get("sha1"), details.get("md5")]
         value = next((str(v) for v in candidates if v), None)
         if not value:
+            run_id = self._execution_start("PB-MALWARE-ENRICH", f"알림 #{alert.get('id')}")
+            self._pb_counter("PB-MALWARE-ENRICH")
+            self._execution_step(run_id, "intake", "completed")
             self._execution_step(run_id, "hash", "skipped", "알림에 해시 없음")
             self._execution_step(run_id, "vt", "skipped", "조회 대상 없음")
             self._execution_step(run_id, "verdict", "skipped")
             self._execution_step(run_id, "handoff", "completed", "기존 AI 트리아지 계속")
             self._execution_finish(run_id, "completed")
             return {"ok": False, "status": "no_hash", "execution_id": run_id}
+        return self._run_malware_lookup(value, alert_id=alert.get("id"), persist=persist,
+                                        alert=alert)
+
+    def _run_malware_lookup(self, value, alert_id=None, persist=True, alert=None,
+                            retry_of=None):
+        target = f"알림 #{alert_id}" if alert_id is not None else "해시 조회"
+        context = {"hash": value, "alert_id": alert_id, "persist": bool(persist)}
+        run_id = self._execution_start("PB-MALWARE-ENRICH", target, context=context,
+                                       retry_of=retry_of)
+        self._pb_counter("PB-MALWARE-ENRICH")
+        self._execution_step(run_id, "intake", "completed",
+                             "재시도 요청 복원" if retry_of else "알림 수신")
         self._execution_step(run_id, "hash", "completed", value)
         self._execution_step(run_id, "vt", "running")
         result = self.virustotal.lookup_hash(value) if self.virustotal else {
@@ -421,9 +452,10 @@ class SOAREngine:
                       f"suspicious {result.get('suspicious', 0)}")
             self._execution_step(run_id, "vt", "completed", detail)
             self._execution_step(run_id, "verdict", "completed", result.get("verdict"))
-            alert.setdefault("details", {})["virustotal"] = result
-            if persist and self.threat_detector and isinstance(alert.get("id"), int):
-                self.threat_detector.enrich_alert(alert["id"], {"virustotal": result})
+            if alert is not None:
+                alert.setdefault("details", {})["virustotal"] = result
+            if persist and self.threat_detector and isinstance(alert_id, int):
+                self.threat_detector.enrich_alert(alert_id, {"virustotal": result})
             self._log_action("PB-MALWARE-ENRICH", "vt_lookup", value,
                              "success", detail)
         else:
@@ -431,8 +463,15 @@ class SOAREngine:
             state = "skipped" if status == "not_configured" else "failed"
             self._execution_step(run_id, "vt", state, status)
             self._execution_step(run_id, "verdict", "skipped")
-        self._execution_step(run_id, "handoff", "completed", "AI 트리아지에 결과 전달")
-        self._execution_finish(run_id, "completed")
+        if result.get("ok"):
+            self._execution_step(run_id, "handoff", "completed", "AI 트리아지에 결과 전달")
+            self._execution_finish(run_id, "completed")
+        elif result.get("status") == "not_configured":
+            self._execution_step(run_id, "handoff", "completed", "연동 설정 후 다시 실행 필요")
+            self._execution_finish(run_id, "completed")
+        else:
+            self._execution_step(run_id, "handoff", "skipped", "조회 실패로 전달하지 않음")
+            self._execution_finish(run_id, "failed")
         return {**result, "execution_id": run_id}
 
     def _process_siem(self, event):
@@ -568,7 +607,7 @@ class SOAREngine:
                     p["runs"] += 1
                     p["last_run"] = datetime.now().strftime("%H:%M:%S")
 
-    def _execution_start(self, pb_id, target):
+    def _execution_start(self, pb_id, target, context=None, retry_of=None):
         steps = [{**s, "status": "pending", "detail": "", "updated": None}
                  for s in steps_for(pb_id)]
         with self._lock:
@@ -576,8 +615,13 @@ class SOAREngine:
             entry = {"id": self._execution_id, "playbook": pb_id, "target": target,
                      "status": "running", "started": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                      "finished": None, "current_step": steps[0]["key"] if steps else None,
-                     "steps": steps}
+                     "steps": steps, "retry_of": retry_of,
+                     "attempt": 1}
+            if retry_of:
+                previous, _ = self.execution_store.get(retry_of)
+                entry["attempt"] = int((previous or {}).get("attempt", 1)) + 1
             self.executions.appendleft(entry)
+            self.execution_store.save(entry, context or {})
         self._emit_execution(entry)
         return entry["id"]
 
@@ -595,6 +639,7 @@ class SOAREngine:
             entry["current_step"] = key if status == "running" else next(
                 (s["key"] for s in entry["steps"] if s["status"] == "pending"), None)
             snapshot = {**entry, "steps": [dict(s) for s in entry["steps"]]}
+            self.execution_store.save(snapshot)
         self._emit_execution(snapshot)
 
     def _execution_finish(self, run_id, status):
@@ -606,6 +651,7 @@ class SOAREngine:
             entry["current_step"] = None
             entry["finished"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             snapshot = {**entry, "steps": [dict(s) for s in entry["steps"]]}
+            self.execution_store.save(snapshot)
         self._emit_execution(snapshot)
 
     def _emit_execution(self, entry):

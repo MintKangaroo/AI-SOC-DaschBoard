@@ -132,6 +132,8 @@ function renderSoarExecutions(runs) {
         <span class="pb-tag">${escapeHtml(run.playbook)}</span>
         <strong style="color:#e6edf3">${escapeHtml(run.target)}</strong>
         <span class="ms-auto badge ${run.status === 'running' ? 'bg-info text-dark' : run.status === 'failed' ? 'bg-danger' : 'bg-success'}">${escapeHtml(SOAR_RUN_STATE[run.status] || run.status)}</span>
+        ${run.attempt > 1 ? `<span class="badge bg-secondary">${run.attempt}차 시도</span>` : ''}
+        ${run.status === 'failed' && run.playbook === 'PB-MALWARE-ENRICH' ? `<button class="btn btn-xs btn-outline-warning" onclick="retrySoarExecution(${Number(run.id)})"><i class="fa fa-rotate-right me-1"></i>실패 단계 재시도</button>` : ''}
         <span class="text-muted font-monospace" style="font-size:9px">${escapeHtml((run.started || '').split(' ')[1] || '')}</span>
       </div>
       <div class="soar-run-steps">${(run.steps || []).map(step => `
@@ -141,6 +143,16 @@ function renderSoarExecutions(runs) {
           ${step.detail ? `<div class="text-truncate mt-1">${escapeHtml(step.detail)}</div>` : ''}
         </div>`).join('')}</div>
     </div>`).join('') : '<div class="text-muted p-3 text-center small">실행 이력 없음</div>';
+}
+
+function retrySoarExecution(id) {
+  fetch(`/api/soar/executions/${encodeURIComponent(id)}/retry`, {method:'POST'})
+    .then(async r => ({ok:r.ok, data:await r.json()}))
+    .then(({ok, data}) => {
+      if (!ok) throw new Error(data.status || data.error || '재시도 실패');
+      loadSoar();
+    })
+    .catch(e => alert(`SOAR 재시도 실패: ${e.message}`));
 }
 
 socket.on('soar_execution', run => {

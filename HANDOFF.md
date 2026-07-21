@@ -22,6 +22,8 @@ Flask 및 Flask-SocketIO 기반 실시간 SOC 대시보드다. 패킷·Sysmon·S
 
 최근 추가 기능:
 
+- SOAR 실행 이력 SQLite 영구 저장 및 재시작 후 최근 100건 복원
+- 실패한 VirusTotal 해시 조회의 안전한 재시도(`retry_of`, `attempt` 추적)
 - SOAR 플레이북 실행 인스턴스와 단계별 실시간 상태 시각화
 - VirusTotal v3 해시 평판 플레이북(`PB-MALWARE-ENRICH`, 파일 업로드 없음)
 - SOAR EICAR 연결 테스트와 VirusTotal 결과의 알림·인시던트 영속 연계

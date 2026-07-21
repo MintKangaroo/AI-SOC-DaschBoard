@@ -37,6 +37,17 @@ def soar_virustotal_test():
     return jsonify(result), (200 if result.get("ok") else 400)
 
 
+@api_bp.route("/soar/executions/<int:execution_id>/retry", methods=["POST"])
+def soar_retry_execution(execution_id):
+    result = _soar().retry_execution(execution_id)
+    if result.get("ok"):
+        audit_record("SOAR_RETRY", target=f"실행 #{execution_id}",
+                     detail=f"새 실행 #{result.get('execution_id')}")
+        return jsonify(result)
+    codes = {"not_found": 404, "not_failed": 409, "not_retryable": 409}
+    return jsonify(result), codes.get(result.get("status"), 400)
+
+
 @api_bp.route("/soar/block", methods=["POST"])
 def soar_block():
     data = request.get_json() or {}

@@ -338,6 +338,54 @@ def test_soar_malware_playbook_tracks_steps(tmp_path):
     assert states["handoff"] == "completed"
 
 
+def test_soar_execution_history_survives_restart(tmp_path):
+    soar = make_soar(tmp_path)
+    soar.virustotal = VirusTotalClient({})
+    result = soar.test_virustotal("a" * 64)
+    assert result["status"] == "not_configured"
+
+    restored = make_soar(tmp_path).get_status()["executions"]
+    assert restored[0]["id"] == result["execution_id"]
+    assert restored[0]["playbook"] == "PB-MALWARE-ENRICH"
+    assert restored[0]["status"] == "completed"
+
+
+def test_soar_failed_vt_execution_can_retry(tmp_path):
+    class FlakyVirusTotal:
+        calls = 0
+
+        def lookup_hash(self, value):
+            self.calls += 1
+            if self.calls == 1:
+                return {"ok": False, "status": "timeout", "hash": value}
+            return {"ok": True, "status": "found", "hash": value,
+                    "verdict": "MALICIOUS", "malicious": 3, "suspicious": 0}
+
+        def status(self):
+            return {"active": True}
+
+    soar = make_soar(tmp_path)
+    soar.virustotal = FlakyVirusTotal()
+    first = soar.test_virustotal("b" * 64)
+    first_run = soar.get_status()["executions"][0]
+    assert not first["ok"] and first_run["status"] == "failed"
+    assert next(s for s in first_run["steps"] if s["key"] == "vt")["status"] == "failed"
+
+    retried = soar.retry_execution(first["execution_id"])
+    assert retried["ok"]
+    run = soar.get_status()["executions"][0]
+    assert run["status"] == "completed"
+    assert run["retry_of"] == first["execution_id"]
+    assert run["attempt"] == 2
+
+
+def test_soar_retry_rejects_completed_execution(tmp_path):
+    soar = make_soar(tmp_path)
+    soar.virustotal = VirusTotalClient({})
+    result = soar.test_virustotal("c" * 64)
+    assert soar.retry_execution(result["execution_id"])["status"] == "not_failed"
+
+
 def test_virustotal_enrichment_persists_on_alert(tmp_path):
     td = ThreatDetector(FakeSocketIO(), config={}, store_path=str(tmp_path / "alerts.db"))
     alert = Alert("EDR_THREAT", "HIGH", "host", "server", "malware",
