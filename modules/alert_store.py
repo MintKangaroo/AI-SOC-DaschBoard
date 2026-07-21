@@ -63,6 +63,22 @@ class AlertStore:
             )
             self._conn.commit()
 
+    def update_details(self, alert_id, details):
+        """외부 평판 등 사후 강화 결과를 기존 알림에 병합 저장한다."""
+        with self._lock:
+            row = self._conn.execute("SELECT details FROM alerts WHERE id=?", (alert_id,)).fetchone()
+            if not row:
+                return False
+            try:
+                current = json.loads(row[0]) if row[0] else {}
+            except json.JSONDecodeError:
+                current = {}
+            current.update(details or {})
+            self._conn.execute("UPDATE alerts SET details=? WHERE id=?",
+                               (json.dumps(current, ensure_ascii=False), alert_id))
+            self._conn.commit()
+        return True
+
     def load_recent(self, limit=500):
         """최근 알림을 오래된 순으로 반환 (deque 복원용)"""
         with self._lock:

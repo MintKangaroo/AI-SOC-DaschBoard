@@ -80,7 +80,11 @@
             <div class="card-panel-header">
               <i class="fa fa-route text-cyan me-2"></i>플레이북 실행 현황
               <span class="ms-auto small" id="soar-vt-status"></span>
+              <button class="btn btn-xs btn-outline-cyan ms-2" onclick="testVirusTotal()">
+                <i class="fa fa-vial me-1"></i>EICAR 연결 테스트
+              </button>
             </div>
+            <div id="soar-vt-test-result" class="small px-2 pb-2 d-none"></div>
             <div id="soar-executions" class="soar-executions">
               <div class="text-muted p-3 text-center small">실행 대기 중…</div>
             </div>

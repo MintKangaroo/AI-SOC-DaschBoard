@@ -320,6 +320,22 @@ class ThreatDetector:
                     return True
         return False
 
+    def enrich_alert(self, alert_id, details):
+        """외부 위협 인텔 결과를 메모리와 영속 알림에 병합한다."""
+        found = False
+        with self._lock:
+            for alert in self.alerts:
+                if alert.id == alert_id:
+                    alert.details.update(details or {})
+                    found = True
+                    break
+        if self.store:
+            try:
+                found = self.store.update_details(alert_id, details) or found
+            except Exception:
+                pass
+        return found
+
     def get_alerts(self, limit=100, severity=None, status=None):
         with self._lock:
             result = list(self.alerts)

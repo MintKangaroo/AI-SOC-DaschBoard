@@ -25,6 +25,18 @@ def soar_toggle_playbook(pb_id):
     return jsonify({"id": pb_id, "enabled": enabled})
 
 
+@api_bp.route("/soar/virustotal/test", methods=["POST"])
+def soar_virustotal_test():
+    data = request.get_json(silent=True) or {}
+    value = (data.get("hash") or "").strip()
+    if not value:
+        return jsonify({"error": "hash가 필요합니다"}), 400
+    result = _soar().test_virustotal(value)
+    audit_record("VIRUSTOTAL_TEST", target=value[:16] + "…",
+                 detail=f"{result.get('status')} / {result.get('verdict', 'UNKNOWN')}")
+    return jsonify(result), (200 if result.get("ok") else 400)
+
+
 @api_bp.route("/soar/block", methods=["POST"])
 def soar_block():
     data = request.get_json() or {}

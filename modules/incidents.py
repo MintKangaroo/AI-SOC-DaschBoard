@@ -82,6 +82,14 @@ class IncidentManager:
                 "ts": _now(), "kind": "alert",
                 "text": f"알림 #{aid} 연결 ({severity}, {alert.get('src_ip')}) — {reason}",
             })
+            vt = (alert.get("details") or {}).get("virustotal") or {}
+            if vt:
+                inc["timeline"].append({
+                    "ts": _now(), "kind": "enrich",
+                    "text": (f"VirusTotal {vt.get('verdict', 'UNKNOWN')} — 악성 "
+                             f"{vt.get('malicious', 0)} · 의심 {vt.get('suspicious', 0)} "
+                             f"· SHA256 {str(vt.get('sha256') or vt.get('hash') or '')[:16]}…"),
+                })
             inc["updated"] = _now()
             inc_id = inc["id"]
             self._save()

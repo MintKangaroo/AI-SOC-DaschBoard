@@ -225,6 +225,29 @@ function soarTogglePb(pbId) {
     .then(() => loadSoar());
 }
 
+function testVirusTotal() {
+  const out = document.getElementById('soar-vt-test-result');
+  if (out) {
+    out.className = 'small px-2 pb-2 text-muted';
+    out.textContent = 'EICAR 테스트 해시 조회 중…';
+  }
+  const hash = '275a021bbfb6489e54d471899f7db9d1663fc695ec2fe2a2c4538aabf651fd0f';
+  fetch('/api/soar/virustotal/test', {
+    method: 'POST', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({hash}),
+  }).then(async r => ({ok:r.ok, body:await r.json()})).then(({ok, body}) => {
+    if (out) {
+      out.className = 'small px-2 pb-2 ' + (ok ? 'text-success' : 'text-danger');
+      out.innerHTML = ok
+        ? `<i class="fa fa-circle-check me-1"></i>${escapeHtml(body.verdict || body.status)} · 악성 ${body.malicious || 0} · 의심 ${body.suspicious || 0}${body.cached ? ' · 캐시' : ''}`
+        : `<i class="fa fa-circle-xmark me-1"></i>${escapeHtml(body.error || body.status || '조회 실패')}`;
+    }
+    loadSoar();
+  }).catch(() => {
+    if (out) { out.className = 'small px-2 pb-2 text-danger'; out.textContent = '연결 테스트 요청 실패'; }
+  });
+}
+
 function soarManualBlock() {
   const input = document.getElementById('soar-block-ip-input');
   const ip = (input?.value || '').trim();
@@ -315,6 +338,7 @@ const INC_TL_ICONS = {
   status: '<i class="fa fa-arrows-rotate text-cyan"></i>',
   assign: '<i class="fa fa-user text-info"></i>',
   note:   '<i class="fa fa-pen text-secondary"></i>',
+  enrich: '<i class="fa fa-shield-virus text-purple"></i>',
 };
 
 function loadIncidents() {

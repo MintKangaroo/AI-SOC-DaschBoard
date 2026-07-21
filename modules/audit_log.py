@@ -22,6 +22,7 @@ ACTIONS = {
     "WATCHLIST_REMOVE":"워치리스트 삭제",
     "ALERT_ARCHIVE":   "알림 아카이브",
     "RETENTION_RUN":   "보존 정책 수동 실행",
+    "VIRUSTOTAL_TEST": "VirusTotal 연결 테스트",
 }
 
 

@@ -338,6 +338,17 @@ def test_soar_malware_playbook_tracks_steps(tmp_path):
     assert states["handoff"] == "completed"
 
 
+def test_virustotal_enrichment_persists_on_alert(tmp_path):
+    td = ThreatDetector(FakeSocketIO(), config={}, store_path=str(tmp_path / "alerts.db"))
+    alert = Alert("EDR_THREAT", "HIGH", "host", "server", "malware",
+                  details={"sha256": "a" * 64})
+    td._add_alert(alert)
+    assert td.enrich_alert(alert.id, {"virustotal": {"verdict": "MALICIOUS", "malicious": 9}})
+    rows, total = td.search_alerts(limit=10)
+    assert total == 1
+    assert rows[0]["details"]["virustotal"]["malicious"] == 9
+
+
 def test_soar_block_ttl_expiry(tmp_path):
     soar = make_soar(tmp_path)
     soar.block_ttl_hours = 0.0001   # 0.36초
@@ -523,6 +534,16 @@ def test_incident_promote_and_merge(tmp_path):
     id3 = im.promote_alert(_fake_alert(3, threat="PORT_SCAN"), "AI 정탐")
     assert id3 != id1
     assert im.get_stats()["total"] == 2
+
+
+def test_incident_timeline_includes_virustotal(tmp_path):
+    im = IncidentManager(store_path=str(tmp_path / "inc.json"))
+    alert = _fake_alert(1, threat="EDR_THREAT")
+    alert["details"] = {"virustotal": {"verdict": "MALICIOUS", "malicious": 42,
+                                         "suspicious": 1, "sha256": "a" * 64}}
+    inc_id = im.promote_alert(alert)
+    timeline = im.get(inc_id)["timeline"]
+    assert any(t["kind"] == "enrich" and "악성 42" in t["text"] for t in timeline)
 
 
 def test_incident_block_and_lifecycle(tmp_path):

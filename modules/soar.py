@@ -207,6 +207,13 @@ class SOAREngine:
         self._log_action("MANUAL", "unblock", ip, "success", "차단 해제")
         return True
 
+    def test_virustotal(self, hash_value):
+        """분석가가 제공한 해시로 강화 플레이북 전체 흐름을 안전하게 시험한다."""
+        return self._process_malware_enrichment({
+            "id": "VT-TEST", "threat_type": "MALWARE_BEACON",
+            "severity": "HIGH", "details": {"sha256": hash_value},
+        }, persist=False)
+
     # ------------------------------------------------------------------ #
     #  워커 루프
     # ------------------------------------------------------------------ #
@@ -390,7 +397,7 @@ class SOAREngine:
             self._execution_step(execution_id, "notify", "completed")
             self._execution_finish(execution_id, "completed")
 
-    def _process_malware_enrichment(self, alert):
+    def _process_malware_enrichment(self, alert, persist=True):
         run_id = self._execution_start("PB-MALWARE-ENRICH", f"알림 #{alert.get('id')}")
         self._pb_counter("PB-MALWARE-ENRICH")
         self._execution_step(run_id, "intake", "completed")
@@ -404,7 +411,7 @@ class SOAREngine:
             self._execution_step(run_id, "verdict", "skipped")
             self._execution_step(run_id, "handoff", "completed", "기존 AI 트리아지 계속")
             self._execution_finish(run_id, "completed")
-            return
+            return {"ok": False, "status": "no_hash", "execution_id": run_id}
         self._execution_step(run_id, "hash", "completed", value)
         self._execution_step(run_id, "vt", "running")
         result = self.virustotal.lookup_hash(value) if self.virustotal else {
@@ -415,6 +422,8 @@ class SOAREngine:
             self._execution_step(run_id, "vt", "completed", detail)
             self._execution_step(run_id, "verdict", "completed", result.get("verdict"))
             alert.setdefault("details", {})["virustotal"] = result
+            if persist and self.threat_detector and isinstance(alert.get("id"), int):
+                self.threat_detector.enrich_alert(alert["id"], {"virustotal": result})
             self._log_action("PB-MALWARE-ENRICH", "vt_lookup", value,
                              "success", detail)
         else:
@@ -424,6 +433,7 @@ class SOAREngine:
             self._execution_step(run_id, "verdict", "skipped")
         self._execution_step(run_id, "handoff", "completed", "AI 트리아지에 결과 전달")
         self._execution_finish(run_id, "completed")
+        return {**result, "execution_id": run_id}
 
     def _process_siem(self, event):
         if not (self._pb_enabled("PB-SIEM-SCANNER") and self.auto_block):
