@@ -23,7 +23,7 @@ class Config:
 
     # Snort IDS fast-alert 연동 (탐지만 수행, 방화벽 차단은 SOAR가 별도 결정)
     SNORT_ENABLED = os.getenv("SNORT_ENABLED", "True")
-    SNORT_ALERT_PATH = os.getenv("SNORT_ALERT_PATH", "/var/log/snort/alert")
+    SNORT_ALERT_PATH = os.getenv("SNORT_ALERT_PATH", "/var/log/snort/snort.alert.fast")
     SNORT_POLL_INTERVAL = float(os.getenv("SNORT_POLL_INTERVAL", 0.5))
 
     # Sysmon log path (Windows)

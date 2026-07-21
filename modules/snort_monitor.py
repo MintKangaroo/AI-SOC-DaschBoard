@@ -55,7 +55,8 @@ class SnortMonitor:
         self.socketio = socketio
         self.threat_detector = threat_detector
         self.enabled = str(config.get("SNORT_ENABLED", "True")) == "True"
-        self.alert_path = str(config.get("SNORT_ALERT_PATH", "/var/log/snort/alert"))
+        self.alert_path = str(config.get(
+            "SNORT_ALERT_PATH", "/var/log/snort/snort.alert.fast"))
         self.poll_interval = max(0.1, float(config.get("SNORT_POLL_INTERVAL", 0.5)))
         self.running = False
         self.events = deque(maxlen=200)
@@ -128,4 +129,3 @@ class SnortMonitor:
             time.sleep(self.poll_interval)
         if handle:
             handle.close()
-

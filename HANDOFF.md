@@ -26,6 +26,9 @@ Flask 및 Flask-SocketIO 기반 실시간 SOC 대시보드다. 패킷·Sysmon·S
   차단하지 않으며 기본값은 CRITICAL + 95% + 독립 근거 2개 + 분석가 승인이다.
 - 안전 설치 스크립트 `scripts/setup_snort_ufw_safe.sh` 추가. sudo 비밀번호가
   필요해 Snort 패키지 설치와 UFW 규칙 변경은 아직 실행하지 않았다.
+- Ubuntu Snort 2의 실제 fast 로그는 `/var/log/snort/snort.alert.fast`다. 설치기가
+  전체 인터페이스를 선택한 경우 `scripts/repair_snort_single_interface.sh`로
+  `eth0` 단일 센서와 `HOME_NET=172.23.160.0/20`으로 교정한다.
 - 2026-07-21 측정 용량: 프로젝트 638MB(venv 493MB), 운영 데이터 111MB.
   alerts.db 60MB, SOAR DB+WAL 약 23MB, incidents.json+백업 약 22MB.
 - 대시보드 렉 최적화: 브라우저별 AI 중복 분석 제거, 숨은 탭 렌더 중단,

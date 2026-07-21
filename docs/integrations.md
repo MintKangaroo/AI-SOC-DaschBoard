@@ -93,12 +93,12 @@ Content-Type: application/json
 
 ### Snort fast-alert 연동
 
-대시보드는 `/var/log/snort/alert`의 `-A fast` 출력을 tail하여 `SNORT_ALERT`로
+대시보드는 `/var/log/snort/snort.alert.fast`의 `-A fast` 출력을 tail하여 `SNORT_ALERT`로
 정규화한다. Snort는 탐지만 담당하며 UFW를 직접 변경하지 않는다.
 
 ```dotenv
 SNORT_ENABLED=True
-SNORT_ALERT_PATH=/var/log/snort/alert
+SNORT_ALERT_PATH=/var/log/snort/snort.alert.fast
 SOAR_MIN_BLOCK_CONFIDENCE=95
 SOAR_REQUIRE_CORROBORATION=True
 ```
@@ -112,6 +112,7 @@ Snort와 UFW 설치는 현재 방화벽 상태를 백업하고 SSH(22), HTTP(80)
 
 ```bash
 sudo bash scripts/setup_snort_ufw_safe.sh
+sudo bash scripts/repair_snort_single_interface.sh
 sudo ufw status numbered
 sudo snort -T -c /etc/snort/snort.conf -i eth0
 ```
