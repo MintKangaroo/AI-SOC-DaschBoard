@@ -9,6 +9,8 @@ data/reports/
 data/*.log
 data/audit.db
 data/watchlist.db
+data/soar_executions.db
+data/.incidents-*.tmp
 # 런타임 산출물 (자동 생성/영속화 — 재실행 시 재생성)
 data/blocklist.txt
 data/incidents.json
