@@ -25,6 +25,8 @@ class Config:
     SNORT_ENABLED = os.getenv("SNORT_ENABLED", "True")
     SNORT_ALERT_PATH = os.getenv("SNORT_ALERT_PATH", "/var/log/snort/snort.alert.fast")
     SNORT_POLL_INTERVAL = float(os.getenv("SNORT_POLL_INTERVAL", 0.5))
+    SNORT_INTERFACE = os.getenv("SNORT_INTERFACE", "eth0")
+    SNORT_HOME_NET = os.getenv("SNORT_HOME_NET", "172.23.160.0/20")
 
     # Sysmon log path (Windows)
     SYSMON_LOG_CHANNEL = os.getenv("SYSMON_LOG_CHANNEL", "Microsoft-Windows-Sysmon/Operational")

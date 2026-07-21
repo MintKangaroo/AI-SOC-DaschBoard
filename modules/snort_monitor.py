@@ -5,6 +5,7 @@ SOAR의 복수 근거·고신뢰·분석가 승인 게이트에서 별도로 결
 """
 import os
 import re
+import subprocess
 import threading
 import time
 from collections import deque
@@ -58,9 +59,12 @@ class SnortMonitor:
         self.alert_path = str(config.get(
             "SNORT_ALERT_PATH", "/var/log/snort/snort.alert.fast"))
         self.poll_interval = max(0.1, float(config.get("SNORT_POLL_INTERVAL", 0.5)))
+        self.interface = str(config.get("SNORT_INTERFACE", "eth0"))
+        self.home_net = str(config.get("SNORT_HOME_NET", "172.23.160.0/20"))
         self.running = False
         self.events = deque(maxlen=200)
         self.stats = {"parsed": 0, "invalid": 0, "alerts": 0, "status": "stopped"}
+        self._system_cache = ({}, 0.0)
 
     def start(self, demo=False):
         if self.running or not self.enabled:
@@ -75,8 +79,32 @@ class SnortMonitor:
         self.running = False
 
     def get_status(self):
+        system, cached_at = self._system_cache
+        now = time.time()
+        if now - cached_at >= 5:
+            system = {
+                "snort_service": self._service_state("snort"),
+                "ufw_service": self._service_state("ufw"),
+                "interface": self.interface,
+                "home_net": self.home_net,
+                "firewall_policy": "deny incoming / allow outgoing",
+                "protected_paths": ["SSH 22", "HTTP 80", "Tailscale", "Dashboard 5055"],
+            }
+            self._system_cache = (system, now)
         return {**self.stats, "enabled": self.enabled, "alert_path": self.alert_path,
-                "recent": list(self.events)[:20]}
+                "recent": list(self.events)[:20], "system": system}
+
+    @staticmethod
+    def _service_state(name):
+        def run(action):
+            try:
+                out = subprocess.run(
+                    ["systemctl", action, name], capture_output=True, text=True,
+                    timeout=2, check=False)
+                return (out.stdout or out.stderr).strip().splitlines()[0]
+            except (OSError, subprocess.TimeoutExpired, IndexError):
+                return "unknown"
+        return {"active": run("is-active"), "enabled": run("is-enabled")}
 
     def ingest_line(self, line):
         event = parse_fast_alert(line)

@@ -71,6 +71,20 @@
         </div>
       </div>
 
+      <div class="card-panel mb-3 clickable" onclick="showPanel('snort')">
+        <div class="card-panel-header">
+          <i class="fa fa-shield-virus text-danger me-2"></i>탐지·방화벽 안전 상태
+          <span class="small text-muted ms-2">Snort → 교차검증 → 승인 → UFW</span>
+          <span id="overview-security-badge" class="badge bg-secondary ms-auto">확인 중</span>
+        </div>
+        <div class="row g-2 p-2 small">
+          <div class="col-md-3">Snort <b id="overview-snort-state" class="text-muted">—</b></div>
+          <div class="col-md-3">UFW <b id="overview-ufw-state" class="text-muted">—</b></div>
+          <div class="col-md-3">센서 <b id="overview-snort-interface" class="text-cyan">—</b></div>
+          <div class="col-md-3">자동 차단 <b class="text-warning">95% · 근거 2개 · 승인</b></div>
+        </div>
+      </div>
+
       <!-- 분석가 우선 처리 큐: 원시 통계보다 지금 조사할 항목을 먼저 노출 -->
       <div class="row g-3 mb-3" id="overview-priority-queue">
         <div class="col-lg-6">

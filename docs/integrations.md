@@ -99,6 +99,8 @@ Content-Type: application/json
 ```dotenv
 SNORT_ENABLED=True
 SNORT_ALERT_PATH=/var/log/snort/snort.alert.fast
+SNORT_INTERFACE=eth0
+SNORT_HOME_NET=172.23.160.0/20
 SOAR_MIN_BLOCK_CONFIDENCE=95
 SOAR_REQUIRE_CORROBORATION=True
 ```
@@ -122,6 +124,11 @@ sudo snort -T -c /etc/snort/snort.conf -i eth0
 정상 관리·점검 IP는 `ipvar` 또는 suppress 목록으로 제외해야 오탐을 줄일 수 있다.
 운영 서비스 포트와 Tailscale 관리 경로를 확인하기 전에는 기본 정책을 임의로
 재작성하지 않는다.
+
+대시보드의 **AI 관제 센터 → 탐지·방화벽 안전 상태**에서 Snort/UFW 요약을
+확인하고, 사이드바의 **Snort · UFW** 탭에서 센서 구성, 수집 건수, 최근 SID와
+출발지·목적지를 확인한다. `/api/integrations/snort`는 동일 정보를 JSON으로
+제공한다. 화면은 현재 탭이 보일 때만 10초 간격으로 갱신한다.
 
 ### 지원 예정 시스템
 - Suricata

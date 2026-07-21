@@ -33,6 +33,9 @@ Flask 및 Flask-SocketIO 기반 실시간 SOC 대시보드다. 패킷·Sysmon·S
 - UFW만 안전하게 활성화할 때는 `scripts/enable_ufw_safe.sh`를 사용한다. 기존
   iptables/UFW 상태 백업 후 SSH 22, HTTP 80, Tailscale 전체와 Tailscale 5055를
   먼저 허용하고 기본 inbound deny를 적용한다.
+- AI 관제 센터에 Snort/UFW 보호 상태 카드를, 수집·탐지 사이드바에 전용 상세
+  탭을 추가했다. API는 `GET /api/integrations/snort`, 화면 갱신은 보이는 탭에서
+  10초 간격이며 최근 fast-alert SID/우선순위/통신 대상을 표시한다.
 - 2026-07-21 측정 용량: 프로젝트 638MB(venv 493MB), 운영 데이터 111MB.
   alerts.db 60MB, SOAR DB+WAL 약 23MB, incidents.json+백업 약 22MB.
 - 대시보드 렉 최적화: 브라우저별 AI 중복 분석 제거, 숨은 탭 렌더 중단,

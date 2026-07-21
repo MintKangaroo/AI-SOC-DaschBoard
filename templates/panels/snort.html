@@ -1,0 +1,51 @@
+    <div id="panel-snort" class="panel-section d-none">
+      <div class="panel-title d-flex align-items-center">
+        <i class="fa fa-shield-virus me-2 text-danger"></i>Snort IDS · UFW 방화벽
+        <span id="snort-live-badge" class="badge bg-secondary ms-3">확인 중</span>
+        <button class="btn btn-xs btn-outline-info ms-auto" onclick="loadSnort(true)">
+          <i class="fa fa-rotate me-1"></i>새로고침
+        </button>
+      </div>
+
+      <div class="card-panel mb-3" style="border-left:3px solid var(--cyan)">
+        <div class="small p-2" style="line-height:1.7">
+          Snort는 패킷 시그니처를 탐지하고, UFW는 승인된 IP만 차단합니다.
+          <strong>Snort 단독 탐지는 차단하지 않으며</strong> CRITICAL · 95% 이상 ·
+          독립 근거 2개 · 분석가 승인을 모두 통과해야 실제 차단됩니다.
+        </div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-md-3"><div class="stat-card border-cyan h-100">
+          <div id="snort-service" class="stat-value text-cyan">—</div><div class="stat-label">Snort 서비스</div>
+        </div></div>
+        <div class="col-md-3"><div class="stat-card border-success h-100">
+          <div id="ufw-service" class="stat-value text-success">—</div><div class="stat-label">UFW 방화벽</div>
+        </div></div>
+        <div class="col-md-3"><div class="stat-card border-warning h-100">
+          <div id="snort-alert-count" class="stat-value text-warning">0</div><div class="stat-label">수집된 Snort 알림</div>
+        </div></div>
+        <div class="col-md-3"><div class="stat-card border-purple h-100">
+          <div id="snort-invalid-count" class="stat-value text-purple">0</div><div class="stat-label">파싱 제외</div>
+        </div></div>
+      </div>
+
+      <div class="row g-3 mb-3">
+        <div class="col-lg-6"><div class="card-panel h-100">
+          <div class="card-panel-header"><i class="fa fa-microchip text-cyan me-2"></i>센서 구성</div>
+          <div id="snort-config" class="p-3 small text-muted">불러오는 중…</div>
+        </div></div>
+        <div class="col-lg-6"><div class="card-panel h-100">
+          <div class="card-panel-header"><i class="fa fa-firewall text-success me-2"></i>방화벽 안전 정책</div>
+          <div id="ufw-policy" class="p-3 small text-muted">불러오는 중…</div>
+        </div></div>
+      </div>
+
+      <div class="card-panel p-0">
+        <div class="card-panel-header px-3"><i class="fa fa-list text-warning me-2"></i>최근 Snort 시그니처</div>
+        <div class="table-responsive"><table class="table table-dark table-hover table-sm mb-0">
+          <thead><tr><th>시각</th><th>우선순위</th><th>SID</th><th>메시지</th><th>출발지</th><th>목적지</th><th>프로토콜</th></tr></thead>
+          <tbody id="snort-events"><tr><td colspan="7" class="text-center text-muted py-3">새 탐지 대기 중</td></tr></tbody>
+        </table></div>
+      </div>
+    </div>

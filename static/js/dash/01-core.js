@@ -129,6 +129,7 @@ function showPanel(name) {
   if (name === 'siem') loadSiem();
   if (name === 'syslog') loadSyslog();
   if (name === 'honeypot') loadHoneypot();
+  if (name === 'snort') loadSnort(true);
   if (name === 'authlog') loadAuthlog();
   if (name === 'reputation') loadReputation();
   if (name === 'edr') loadEdr();

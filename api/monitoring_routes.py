@@ -136,6 +136,14 @@ def honeypot_status():
     return jsonify(hp.get_status())
 
 
+@api_bp.route("/integrations/snort", methods=["GET"])
+def snort_status():
+    sensor = getattr(current_app._get_current_object(), "snort", None)
+    if sensor is None:
+        return jsonify({"enabled": False, "status": "unavailable", "recent": []})
+    return jsonify(sensor.get_status())
+
+
 # ------------------------------------------------------------------ #
 #  SIEM 상관관계 분석
 # ------------------------------------------------------------------ #
