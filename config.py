@@ -21,6 +21,11 @@ class Config:
     # 정탐 신뢰도 임계값 (0~1) — 미만 알림은 '오탐 의심'으로 저장만 하고 실시간 표시 억제
     ALERT_CONFIDENCE_THRESHOLD = float(os.getenv("ALERT_CONFIDENCE_THRESHOLD", 0.5))
 
+    # Snort IDS fast-alert 연동 (탐지만 수행, 방화벽 차단은 SOAR가 별도 결정)
+    SNORT_ENABLED = os.getenv("SNORT_ENABLED", "True")
+    SNORT_ALERT_PATH = os.getenv("SNORT_ALERT_PATH", "/var/log/snort/alert")
+    SNORT_POLL_INTERVAL = float(os.getenv("SNORT_POLL_INTERVAL", 0.5))
+
     # Sysmon log path (Windows)
     SYSMON_LOG_CHANNEL = os.getenv("SYSMON_LOG_CHANNEL", "Microsoft-Windows-Sysmon/Operational")
     WINDOWS_EVENT_LOG_MAX = int(os.getenv("WINDOWS_EVENT_LOG_MAX", 100))
@@ -111,6 +116,8 @@ class Config:
     SOAR_AUTO_BLOCK = os.getenv("SOAR_AUTO_BLOCK", "True")
     SOAR_APPROVAL_REQUIRED = os.getenv("SOAR_APPROVAL_REQUIRED", "True") == "True"
     SOAR_APPROVAL_TIMEOUT_MINUTES = int(os.getenv("SOAR_APPROVAL_TIMEOUT_MINUTES", 15))
+    SOAR_MIN_BLOCK_CONFIDENCE = int(os.getenv("SOAR_MIN_BLOCK_CONFIDENCE", 95))
+    SOAR_REQUIRE_CORROBORATION = os.getenv("SOAR_REQUIRE_CORROBORATION", "True") == "True"
     INCIDENT_SAVE_DEBOUNCE_SECONDS = float(os.getenv("INCIDENT_SAVE_DEBOUNCE_SECONDS", 5))
     # 차단 자동 만료 (시간) — 0 이면 영구 차단
     SOAR_BLOCK_TTL_HOURS = float(os.getenv("SOAR_BLOCK_TTL_HOURS", 24))

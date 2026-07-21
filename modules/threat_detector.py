@@ -37,6 +37,7 @@ THREAT_TYPES = {
     "WEB_ATTACK": "웹 공격 (SQLi/XSS 등)",
     "HONEYPOT": "허니팟 유인 탐지",
     "CORRELATED": "SIEM 상관관계 탐지",
+    "SNORT_ALERT": "Snort IDS 탐지",
 }
 
 
@@ -391,11 +392,18 @@ class ThreatDetector:
     def _confidence(self, alert):
         """정탐 확률 추정 (0.05~0.99) — IoC 일치·재범 IP·외부 IP 가중"""
         score = self._BASE_CONFIDENCE.get(alert.severity, 0.5)
+        evidence = set(alert.details.get("evidence") or [])
+        if alert.details.get("source") == "snort":
+            evidence.add("snort_signature")
+            # 룰 우선순위는 강한 탐지 근거지만 단독 정탐 확정은 아니다.
+            score += 0.10 if alert.details.get("priority") == 1 else 0.05
 
         # 위협 인텔 IoC 일치 → 사실상 정탐
         if self.threat_intel and alert.src_ip:
             try:
                 if self.threat_intel.check_ip(alert.src_ip):
+                    evidence.add("threat_intel_ioc")
+                    alert.details["evidence"] = sorted(evidence)
                     return 0.98
             except Exception:
                 pass
@@ -413,8 +421,11 @@ class ThreatDetector:
                 alert.details["ip_reputation"] = rep
                 rscore = rep.get("score", 0)
                 if rscore >= 90:        # 확실한 악성 → 사실상 정탐
+                    evidence.add("abuseipdb_90")
+                    alert.details["evidence"] = sorted(evidence)
                     return 0.97
                 elif rscore >= self.ip_reputation.min_score:
+                    evidence.add("abuseipdb_high")
                     score += 0.20       # 악성 신고 다수 → 강한 정탐 신호
                 elif rscore >= 25:
                     score += 0.08
@@ -441,6 +452,7 @@ class ThreatDetector:
             except Exception:
                 pass
 
+        alert.details["evidence"] = sorted(evidence)
         return max(0.05, min(0.99, round(score, 2)))
 
     def _add_alert(self, alert):

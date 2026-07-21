@@ -34,6 +34,7 @@ from modules.siem_correlation import SIEMCorrelator
 from modules.audit_log import AuditLog
 from modules.watchlist import Watchlist
 from modules.virustotal import VirusTotalClient
+from modules.snort_monitor import SnortMonitor
 
 
 def build_services(app, socketio):
@@ -73,6 +74,7 @@ def build_services(app, socketio):
     threat_detector.soar = soar
     siem_collector.soar  = soar
     threat_intel.soar    = soar
+    snort = SnortMonitor(socketio, app.config, threat_detector=threat_detector)
 
     decision = DecisionSupport(socketio)
     threat_detector.decision = decision   # 클러스터 prior → 알림 신뢰도 반영
@@ -177,6 +179,7 @@ def build_services(app, socketio):
     app.sigma            = sigma
     app.daily_report     = daily_report
     app.purple           = purple
+    app.snort            = snort
 
 
 def start_services(app, socketio):
@@ -186,6 +189,7 @@ def start_services(app, socketio):
 
     app.packet_analyzer.start(interface=iface, demo=demo)
     app.threat_detector.start(demo=demo)
+    app.snort.start(demo=False)       # Snort는 합성 이벤트를 만들지 않음
     app.sysmon_parser.start(demo=demo)
     app.ai_analyst.start()
     app.ml_analyst.start()

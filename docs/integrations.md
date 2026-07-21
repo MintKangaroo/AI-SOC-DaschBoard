@@ -91,8 +91,37 @@ Content-Type: application/json
 
 ## IPS/IDS 연동
 
+### Snort fast-alert 연동
+
+대시보드는 `/var/log/snort/alert`의 `-A fast` 출력을 tail하여 `SNORT_ALERT`로
+정규화한다. Snort는 탐지만 담당하며 UFW를 직접 변경하지 않는다.
+
+```dotenv
+SNORT_ENABLED=True
+SNORT_ALERT_PATH=/var/log/snort/alert
+SOAR_MIN_BLOCK_CONFIDENCE=95
+SOAR_REQUIRE_CORROBORATION=True
+```
+
+안전 기본값에서는 `CRITICAL`, 최종 판정 95% 이상, 독립 근거 2개 이상을 모두
+만족해야 자동 차단 후보가 된다. 후보가 되어도 분석가 승인 게이트를 통과해야
+UFW 명령이 실행된다. 데모 평판과 데모 이벤트는 차단 근거로 인정하지 않는다.
+
+Snort와 UFW 설치는 현재 방화벽 상태를 백업하고 SSH(22), HTTP(80), Tailscale,
+대시보드(5055)를 먼저 허용하는 스크립트로 수행한다.
+
+```bash
+sudo bash scripts/setup_snort_ufw_safe.sh
+sudo ufw status numbered
+sudo snort -T -c /etc/snort/snort.conf -i eth0
+```
+
+설치 후 Snort의 `HOME_NET`을 실제 서버 대역(`172.23.160.0/20`)에 맞추고,
+정상 관리·점검 IP는 `ipvar` 또는 suppress 목록으로 제외해야 오탐을 줄일 수 있다.
+운영 서비스 포트와 Tailscale 관리 경로를 확인하기 전에는 기본 정책을 임의로
+재작성하지 않는다.
+
 ### 지원 예정 시스템
-- Snort 3
 - Suricata
 - Zeek (Bro)
 

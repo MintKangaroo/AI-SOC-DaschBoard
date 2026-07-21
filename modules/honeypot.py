@@ -244,7 +244,10 @@ class Honeypot:
                     "HONEYPOT", event["severity"], ip, self._server_ip, desc,
                     {"source": "honeypot", "service": event["service"],
                      "port": event["port"], "interacted": event["interacted"],
-                     "payload": event["payload"]})
+                     "payload": event["payload"], "demo": event.get("demo", False),
+                     "evidence": ([] if event.get("demo") else
+                                  ["honeypot_interaction" if event["interacted"]
+                                   else "honeypot_contact"])})
             except Exception as e:
                 print(f"[Honeypot] 알림 전달 오류: {e}")
 

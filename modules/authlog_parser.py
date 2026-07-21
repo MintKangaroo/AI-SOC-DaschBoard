@@ -178,7 +178,8 @@ class AuthLogMonitor:
                     "BRUTE_FORCE", "HIGH", ip, self._server_ip,
                     f"SSH 무차별 대입: {ip} → {count}회 실패/{int(self.window)}초 (대상 계정: {user})",
                     {"fail_count": count, "window_s": int(self.window),
-                     "last_user": user, "source": "auth.log"})
+                     "last_user": user, "source": "auth.log",
+                     "evidence": ["auth_bruteforce"], "demo": False})
             except Exception as e:
                 print(f"[AuthLog] 알림 전달 오류: {e}")
 

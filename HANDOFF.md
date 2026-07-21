@@ -22,6 +22,12 @@ Flask 및 Flask-SocketIO 기반 실시간 SOC 대시보드다. 패킷·Sysmon·S
 
 최근 추가 기능:
 
+- Snort fast-alert 연동 및 보수적 자동 차단 증거 게이트 추가. Snort 단독 탐지는
+  차단하지 않으며 기본값은 CRITICAL + 95% + 독립 근거 2개 + 분석가 승인이다.
+- 안전 설치 스크립트 `scripts/setup_snort_ufw_safe.sh` 추가. sudo 비밀번호가
+  필요해 Snort 패키지 설치와 UFW 규칙 변경은 아직 실행하지 않았다.
+- 2026-07-21 측정 용량: 프로젝트 638MB(venv 493MB), 운영 데이터 111MB.
+  alerts.db 60MB, SOAR DB+WAL 약 23MB, incidents.json+백업 약 22MB.
 - 대시보드 렉 최적화: 브라우저별 AI 중복 분석 제거, 숨은 탭 렌더 중단,
   패킷 차트·SOAR 이벤트 스로틀, 알림 테이블 200행 배치 갱신, 대형 인시던트
   JSON 자동 병합 저장 5초 배치, SOAR SQLite WAL 적용

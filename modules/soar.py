@@ -49,6 +49,10 @@ class SOAREngine:
         self.block_mode = str(self.config.get("SOAR_BLOCK_MODE", "simulate")).lower()
         self.auto_block = str(self.config.get("SOAR_AUTO_BLOCK", "True")) == "True"
         self.approval_required = bool(self.config.get("SOAR_APPROVAL_REQUIRED", False))
+        self.min_block_confidence = int(self.config.get("SOAR_MIN_BLOCK_CONFIDENCE", 95))
+        corroboration = self.config.get("SOAR_REQUIRE_CORROBORATION", False)
+        self.require_corroboration = (corroboration is True or
+                                      str(corroboration).lower() == "true")
         try:
             self.approval_timeout_minutes = max(
                 1, int(self.config.get("SOAR_APPROVAL_TIMEOUT_MINUTES", 15)))
@@ -173,6 +177,8 @@ class SOAREngine:
                 "auto_block": self.auto_block,
                 "approval_required": self.approval_required,
                 "approval_timeout_minutes": self.approval_timeout_minutes,
+                "min_block_confidence": self.min_block_confidence,
+                "require_corroboration": self.require_corroboration,
                 "block_ttl_hours": self.block_ttl_hours,
                 "safety": {
                     "cgnat_protected": "100.64.0.0/10 (Tailscale)",
@@ -342,6 +348,7 @@ class SOAREngine:
         src_ip = alert.get("src_ip")
 
         threat_type = alert.get("threat_type")
+        auto_block_eligible = self._eligible_auto_block(alert)
 
         if (self._pb_enabled("PB-MALWARE-ENRICH") and
                 threat_type in ("MALWARE_BEACON", "EDR_THREAT", "SIGMA_MATCH")):
@@ -350,6 +357,7 @@ class SOAREngine:
         # PB-BRUTE-BLOCK: AI 없이도 즉시 차단 (명백한 케이스)
         if (self._pb_enabled("PB-BRUTE-BLOCK") and self.auto_block
                 and threat_type == "BRUTE_FORCE"
+                and auto_block_eligible
                 and self._is_external(src_ip)):
             self._pb_run("PB-BRUTE-BLOCK")
             self._block_ip(src_ip, f"무차별 대입 (알림 #{alert_id})",
@@ -358,6 +366,7 @@ class SOAREngine:
         # PB-HONEYPOT-BLOCK: 허니팟 접촉 = 고신뢰 침해지표 → 즉시 차단
         if (self._pb_enabled("PB-HONEYPOT-BLOCK") and self.auto_block
                 and threat_type == "HONEYPOT"
+                and auto_block_eligible
                 and self._is_external(src_ip)):
             self._pb_run("PB-HONEYPOT-BLOCK")
             self._block_ip(src_ip, f"허니팟 유인 접촉 (알림 #{alert_id})",
@@ -477,16 +486,47 @@ class SOAREngine:
                 pass
 
         # PB-AUTO-BLOCK: 정탐 + CRITICAL + 외부 IP + 고신뢰
+        block_evidence = self._block_evidence(alert)
+        enough_evidence = (not self.require_corroboration or len(block_evidence) >= 2)
         if (self._pb_enabled("PB-AUTO-BLOCK") and self.auto_block
                 and alert.get("severity") == "CRITICAL"
-                and confidence >= 80 and self._is_external(src_ip)):
+                and confidence >= self.min_block_confidence and enough_evidence
+                and not (alert.get("details") or {}).get("demo")
+                and self._is_external(src_ip)):
             self._pb_run("PB-AUTO-BLOCK")
             self._block_ip(src_ip,
-                           f"{who} 정탐 CRITICAL (알림 #{alert_id}, {confidence}%)",
+                           f"{who} 정탐 CRITICAL (알림 #{alert_id}, {confidence}%, "
+                           f"근거: {', '.join(block_evidence)})",
                            playbook="PB-AUTO-BLOCK")
         if execution_id:
             self._execution_step(execution_id, "notify", "completed")
             self._execution_finish(execution_id, "completed")
+
+    @staticmethod
+    def _block_evidence(alert):
+        """서로 독립적인 자동 차단 근거만 반환한다."""
+        details = alert.get("details") or {}
+        evidence = set(details.get("evidence") or [])
+        if details.get("source") == "snort":
+            evidence.add("snort_signature")
+        rep = details.get("ip_reputation") or {}
+        if rep.get("score", 0) >= 90 and rep.get("source") != "demo":
+            evidence.add("abuseipdb_90")
+        vt = details.get("virustotal") or {}
+        if vt.get("malicious", 0) >= 5:
+            evidence.add("virustotal_5plus")
+        return sorted(evidence)
+
+    def _eligible_auto_block(self, alert):
+        """자동 생성 이벤트가 차단 후보 큐에 들어갈 최소 안전 조건."""
+        details = alert.get("details") or {}
+        if details.get("demo"):
+            return False
+        confidence = float(alert.get("confidence") or details.get("confidence") or 0)
+        if confidence * 100 < self.min_block_confidence:
+            return False
+        return (not self.require_corroboration or
+                len(self._block_evidence(alert)) >= 2)
 
     def _process_malware_enrichment(self, alert, persist=True):
         details = alert.get("details") or {}
@@ -554,6 +594,8 @@ class SOAREngine:
         ip = event.get("ip")
         if not self._is_external(ip):
             return
+        if self.require_corroboration:
+            return  # 반복 로그 한 종류만으로는 자동 차단 후보를 만들지 않음
         self._siem_probe_counter[ip] += 1
         if self._siem_probe_counter[ip] == 3:   # 3회째에 1번만 발동
             self._pb_run("PB-SIEM-SCANNER")
@@ -566,6 +608,8 @@ class SOAREngine:
             return
         if match.get("kind") != "ip":
             return
+        if self.require_corroboration:
+            return  # 단일 IoC 피드 일치만으로는 자동 차단 후보를 만들지 않음
         ip = match.get("indicator")
         self._pb_run("PB-IOC-BLOCK")
         self._block_ip(ip, f"위협 인텔 IoC 매칭 ({match.get('description', '')[:60]})",
