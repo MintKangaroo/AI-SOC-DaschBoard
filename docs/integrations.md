@@ -113,6 +113,7 @@ Snort와 UFW 설치는 현재 방화벽 상태를 백업하고 SSH(22), HTTP(80)
 ```bash
 sudo bash scripts/setup_snort_ufw_safe.sh
 sudo bash scripts/repair_snort_single_interface.sh
+sudo bash scripts/enable_ufw_safe.sh
 sudo ufw status numbered
 sudo snort -T -c /etc/snort/snort.conf -i eth0
 ```

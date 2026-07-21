@@ -36,7 +36,7 @@ pkill -x snort || true
 sleep 1
 # Snort 2 데몬이 SIGTERM을 무시하고 남는 경우 시작 전에 강제 정리한다.
 if pgrep -x snort >/dev/null; then
-  pkill -9 -x snort
+  pkill -9 -x snort || true
   sleep 1
 fi
 systemctl reset-failed snort || true
