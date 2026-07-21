@@ -47,13 +47,17 @@ const sevChart = new Chart(sevCtx, {
   },
 });
 
+let _lastPacketChartAt = 0;
+
 /* ─────────── Socket: 패킷 업데이트 ─────────── */
 socket.on('packet_update', data => {
   const s = data.stats;
   document.getElementById('stat-pps').textContent = s.packets_per_sec.toLocaleString();
   document.getElementById('stat-total-packets').textContent = s.total_packets.toLocaleString();
 
-  if (isPanelVisible('overview')) {
+  const now = performance.now();
+  if (isPanelVisible('overview') && !document.hidden && now - _lastPacketChartAt >= 500) {
+    _lastPacketChartAt = now;
     // 미니 차트 갱신
     const hist = data.traffic_history || [];
     miniTrafficChart.data.labels = hist.map(h => h.time);
@@ -81,8 +85,8 @@ const _threatTypeCounter = {};
 let _threatTypeChart = null;
 
 socket.on('new_alert', alert => {
-  prependAlertRow(alert);
-  prependOverviewAlert(alert);
+  if (isPanelVisible('alerts') && !document.hidden) prependAlertRow(alert);
+  if (isPanelVisible('overview') && !document.hidden) prependOverviewAlert(alert);
   updateSeverityChart(alert.severity);
 
   document.getElementById('stat-total-alerts').textContent =
@@ -98,14 +102,14 @@ socket.on('new_alert', alert => {
   _attackerCounter[alert.src_ip].count++;
   _attackerCounter[alert.src_ip].type = alert.threat_type;
   document.getElementById('kpi-unique-attackers').textContent = Object.keys(_attackerCounter).length;
-  renderTopAttackers();
+  if (isPanelVisible('overview') && !document.hidden) renderTopAttackers();
 
   // 위협 유형 차트
   _threatTypeCounter[alert.threat_label] = (_threatTypeCounter[alert.threat_label] || 0) + 1;
-  renderThreatTypeChart();
+  if (isPanelVisible('overview') && !document.hidden) renderThreatTypeChart();
 
   // THREAT LEVEL 재계산
-  updateThreatLevel();
+  if (isPanelVisible('overview') && !document.hidden) updateThreatLevel();
   if (typeof schedulePriorityReload === 'function') schedulePriorityReload();
 
   // 통합 라이브 스트림
@@ -116,10 +120,7 @@ socket.on('new_alert', alert => {
     demoBadge(alert.details),
     { lowConf: !!alert.details?.low_confidence });
 
-  // AI 자동 분석 (CRITICAL/HIGH)
-  if (['CRITICAL', 'HIGH'].includes(alert.severity)) {
-    socket.emit('request_ai_analysis', { alert });
-  }
+  // 자동 AI 트리아지는 서버 SOAR에서 한 번만 수행한다.
 });
 
 function incEl(id) {
@@ -155,7 +156,7 @@ function pushLive(kind, severity, html, meta) {
   });
   while (_liveBuffer.length > LIVE_MAX) _liveBuffer.pop();
   // 이벤트 폭주 시 렉 방지 — 최대 ~3회/초로 렌더 배치
-  if (!_liveRenderTimer) {
+  if (!_liveRenderTimer && isPanelVisible('overview') && !document.hidden) {
     _liveRenderTimer = setTimeout(() => { _liveRenderTimer = null; renderLiveStream(); }, 300);
   }
 }
@@ -326,7 +327,7 @@ function renderOverviewSysmon(events) {
 
 socket.on('sysmon_alert', event => {
   // 의심 Sysmon 이벤트는 빨간 행으로 강조
-  updateSysmonTable([event], true);
+  if (isPanelVisible('sysmon') && !document.hidden) updateSysmonTable([event], true);
 });
 
 /* ─────────── Socket: AI 분석 (패널 제거 — 네비 배지만 갱신) ─────────── */
@@ -346,6 +347,7 @@ socket.on('ai_analysis', () => {
 
 /* ─────────── Socket: 지도 공격 ─────────── */
 socket.on('map_attack', entry => {
+  if (!isPanelVisible('overview') || document.hidden) return;
   animateAttack(entry);
   prependAttackLog(entry);
   updateCountryChart(entry.src_country);

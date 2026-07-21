@@ -192,12 +192,19 @@ function retrySoarExecution(id) {
     .catch(e => alert(`SOAR 재시도 실패: ${e.message}`));
 }
 
+let _soarExecutionRenderTimer = null;
 socket.on('soar_execution', run => {
-  if (!isPanelVisible('soar')) return;
   const runs = ((_soarStatus && _soarStatus.executions) || []).filter(r => r.id !== run.id);
   runs.unshift(run);
   if (_soarStatus) _soarStatus.executions = runs.slice(0, 30);
-  renderSoarExecutions(runs);
+  if (document.hidden || (!isPanelVisible('soar') && !isPanelVisible('overview'))) return;
+  if (_soarExecutionRenderTimer) return;
+  _soarExecutionRenderTimer = setTimeout(() => {
+    _soarExecutionRenderTimer = null;
+    const latest = (_soarStatus && _soarStatus.executions) || [];
+    if (isPanelVisible('soar')) renderSoarExecutions(latest);
+    if (isPanelVisible('overview') && _soarStatus) renderOverviewFlowControl(_soarStatus);
+  }, 200);
 });
 
 // 정탐(tp)/오탐(fp) 카드·숫자 클릭 → SOAR 트리아지 상세 내역 모달
@@ -617,6 +624,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // 마지막 갱신 시간 표시
   setInterval(() => {
+    if (document.hidden || !isPanelVisible('overview')) return;
     const el = document.getElementById('overview-last-update');
     if (el) el.textContent = '최종 갱신 ' + new Date().toLocaleTimeString('ko-KR', { hour12:false });
   }, 1000);

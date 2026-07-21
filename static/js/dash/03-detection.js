@@ -8,9 +8,13 @@ function loadAlerts() {
     .then(r => r.json())
     .then(d => {
       const tbody = document.getElementById('alerts-tbody');
-      tbody.innerHTML = '';
-      d.alerts.forEach(a => prependAlertRow(a, false));
-      if (!alertsDataTable) {
+      if (alertsDataTable) {
+        alertsDataTable.clear();
+        d.alerts.forEach(a => prependAlertRow(a, false, false));
+        alertsDataTable.draw(false);
+      } else {
+        tbody.innerHTML = '';
+        d.alerts.forEach(a => prependAlertRow(a, false, false));
         alertsDataTable = $('#alerts-table').DataTable({
           order: [[0, 'desc']],
           pageLength: 20,
@@ -37,7 +41,7 @@ function confBadge(alert) {
   return ` <span class="badge ${cls}" style="font-size:9px" title="정탐 신뢰도">${Math.round(c*100)}%</span>`;
 }
 
-function prependAlertRow(alert, prepend = true) {
+function prependAlertRow(alert, prepend = true, draw = true) {
   const tbody = document.getElementById('alerts-tbody');
   if (!tbody) return;
   const statusColors = { OPEN: 'danger', ACK: 'warning', CLOSED: 'secondary' };
@@ -68,7 +72,7 @@ function prependAlertRow(alert, prepend = true) {
     while (alertsDataTable.rows().count() > maxRows) {
       alertsDataTable.row(':last').remove();
     }
-    alertsDataTable.draw(false);
+    if (draw) alertsDataTable.draw(false);
   } else {
     if (prepend && tbody.firstChild) tbody.insertBefore(row, tbody.firstChild);
     else tbody.appendChild(row);
@@ -142,7 +146,7 @@ function updateSeverityChart(sev) {
   const idx = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3 }[sev];
   if (idx !== undefined) {
     sevChart.data.datasets[0].data[idx]++;
-    sevChart.update('none');
+    if (isPanelVisible('overview') && !document.hidden) sevChart.update('none');
   }
 }
 

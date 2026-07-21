@@ -162,10 +162,9 @@ def create_app():
 
     @socketio.on("request_ai_analysis")
     def on_ai_analysis(data):
-        alert = data.get("alert")
-        if alert:
-            result = app.ai_analyst.analyze_alert(alert, async_mode=False)
-            socketio.emit("ai_analysis", result, to=request.sid)
+        # 이전 프런트엔드 호환용 no-op. 자동 AI 트리아지는 서버 SOAR가 1회 수행한다.
+        # 브라우저별 재분석은 접속자 수만큼 중복 작업을 만들므로 실행하지 않는다.
+        return {"accepted": False, "reason": "server_managed_triage"}
 
     # 백그라운드 서비스 시작 + ML 피드 루프 (상세는 wiring.py)
     start_services(app, socketio)

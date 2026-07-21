@@ -110,7 +110,12 @@ function showPanel(name) {
 
   closeSidebar();   // 모바일: 패널 선택 시 드로어 닫기
 
-  if (name === 'overview') setTimeout(initMap, 50);
+  if (name === 'overview') setTimeout(() => {
+    initMap();
+    if (typeof renderLiveStream === 'function') renderLiveStream();
+    if (typeof renderTopAttackers === 'function') renderTopAttackers();
+    if (typeof renderThreatTypeChart === 'function') renderThreatTypeChart();
+  }, 50);
   if (name === 'traffic') initTrafficCharts();
   if (name === 'alerts') loadAlerts();
   if (name === 'alert-history') loadAlertHistory();
@@ -290,6 +295,7 @@ document.querySelectorAll('.sidebar-link').forEach(link => {
 
 /* ─────────────────── 시간 표시 ─────────────────── */
 setInterval(() => {
+  if (document.hidden) return;
   document.getElementById('current-time').textContent =
     new Date().toLocaleString('ko-KR', { hour12: false });
 }, 1000);
