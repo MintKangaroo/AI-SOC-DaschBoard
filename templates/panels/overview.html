@@ -60,6 +60,9 @@
             <div class="d-flex align-items-center mb-1">
               <span class="small fw-bold text-warning">승인 대기 조치</span>
               <span id="overview-approval-count" class="badge bg-secondary ms-2">0</span>
+              <button id="overview-approve-all" class="btn btn-xs btn-success ms-auto d-none" onclick="approveAllSoar()">
+                <i class="fa fa-check-double me-1"></i>대기 전체 승인
+              </button>
             </div>
             <div id="overview-approvals" class="priority-list" style="max-height:150px">
               <div class="small text-muted py-2">대기 중인 조치 없음</div>

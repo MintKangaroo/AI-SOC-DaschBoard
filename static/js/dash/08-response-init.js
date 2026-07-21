@@ -162,15 +162,34 @@ function reviewSoarApproval(id, decision) {
   }).catch(e => alert(`승인 처리 실패: ${e.message}`));
 }
 
+let _overviewPendingApprovalIds = [];
+function approveAllSoar() {
+  const ids = [..._overviewPendingApprovalIds];
+  if (!ids.length) return;
+  if (!confirm(`현재 화면의 승인 대기 ${ids.length}건을 모두 승인할까요?`)) return;
+  const reason = prompt('일괄 승인 사유를 입력하세요 (선택)', '일괄 승인') ?? null;
+  if (reason === null) return;
+  fetch('/api/soar/approvals/batch', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({execution_ids:ids, reason})
+  }).then(async r => ({ok:r.ok, data:await r.json()})).then(({ok,data}) => {
+    if (!ok && !data.results) throw new Error(data.error || '일괄 승인 실패');
+    alert(`일괄 승인 결과: 성공 ${data.approved || 0}건 · 실패 ${data.failed || 0}건`);
+    loadSoar();
+  }).catch(e => alert(`일괄 승인 실패: ${e.message}`));
+}
+
 function renderOverviewFlowControl(d) {
   const runs = d.executions || [];
   const pending = runs.filter(r => r.status === 'waiting_approval');
+  _overviewPendingApprovalIds = pending.map(r => Number(r.id));
   const running = runs.filter(r => r.status === 'running').length;
   const failed = runs.filter(r => r.status === 'failed').length;
   const state = document.getElementById('overview-flow-state');
   if (state) state.innerHTML = `자동화 <b class="${d.auto_block ? 'text-success' : 'text-danger'}">${d.auto_block ? '활성' : '중지'}</b> · 승인 게이트 <b class="${d.approval_required ? 'text-warning' : 'text-muted'}">${d.approval_required ? `활성(${d.approval_timeout_minutes}분)` : '비활성'}</b> · 실행 중 <b class="text-info">${running}</b> · 실패 <b class="text-danger">${failed}</b>`;
   const count = document.getElementById('overview-approval-count');
   if (count) { count.textContent = pending.length; count.className = `badge ms-2 ${pending.length ? 'bg-warning text-dark' : 'bg-secondary'}`; }
+  document.getElementById('overview-approve-all')?.classList.toggle('d-none', !pending.length);
   const box = document.getElementById('overview-approvals');
   if (box) box.innerHTML = pending.length ? pending.map(run => `
     <div class="priority-item">

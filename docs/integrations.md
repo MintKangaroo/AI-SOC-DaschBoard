@@ -30,6 +30,11 @@ SOAR_APPROVAL_TIMEOUT_MINUTES=15
 API에서는 `POST /api/soar/executions/{id}/approval`에
 `{"decision":"approve|reject|cancel", "reason":"..."}`를 전송한다. 승인된
 경우에만 방화벽 실행 경로로 진입하며 안전 목록 검사는 승인 요청 전에도 적용된다.
+
+AI 관제 센터와 SOAR 상세 탭의 `대기 전체 승인`은 버튼을 누른 시점에 화면에
+표시된 실행 ID만 최대 100건 승인한다. 확인 이후 새로 유입된 요청은 포함하지
+않는다. API는 `POST /api/soar/approvals/batch`이며 요청 형식은
+`{"execution_ids":[1,2], "reason":"..."}`이다.
 - API 키 또는 해시가 없으면 단계가 `건너뜀`으로 표시되고 기존 트리아지는 계속된다.
 - SOAR 실행 현황에서 대기·진행·완료·건너뜀·실패 상태를 실시간 확인한다.
 - SOAR의 `EICAR 연결 테스트` 버튼은 안전한 테스트 해시로 인증·응답 파싱을 검증한다.

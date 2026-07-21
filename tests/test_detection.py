@@ -428,6 +428,21 @@ def test_soar_pending_approval_survives_restart(tmp_path):
     assert restored.review_approval(run["id"], "cancel", "analyst")["status"] == "cancelled"
 
 
+def test_soar_batch_approval_only_processes_requested_snapshot(tmp_path):
+    soar = make_approval_soar(tmp_path)
+    first = soar.manual_block_request("6.6.6.6", "일괄 1")
+    second = soar.manual_block_request("5.5.5.5", "일괄 2")
+    untouched = soar.manual_block_request("4.4.4.4", "일괄 제외")
+    result = soar.approve_many([first["execution_id"], second["execution_id"]],
+                               "analyst", "확인 완료")
+    assert result["approved"] == 2 and result["failed"] == 0
+    assert {"6.6.6.6", "5.5.5.5"}.issubset(soar.blocked_ips)
+    assert "4.4.4.4" not in soar.blocked_ips
+    pending = [e["id"] for e in soar.get_status()["executions"]
+               if e["status"] == "waiting_approval"]
+    assert pending == [untouched["execution_id"]]
+
+
 def test_virustotal_enrichment_persists_on_alert(tmp_path):
     td = ThreatDetector(FakeSocketIO(), config={}, store_path=str(tmp_path / "alerts.db"))
     alert = Alert("EDR_THREAT", "HIGH", "host", "server", "malware",

@@ -33,12 +33,15 @@ def _src_net(ip):
 
 
 class IncidentManager:
-    def __init__(self, socketio=None, store_path="data/incidents.json"):
+    def __init__(self, socketio=None, store_path="data/incidents.json",
+                 save_debounce_seconds=0):
         self.socketio = socketio
         self.store_path = store_path
         self._lock = threading.Lock()
         self.incidents = {}     # id → incident dict
         self._next_id = 1
+        self._save_debounce_seconds = max(0, float(save_debounce_seconds or 0))
+        self._save_timer = None
         self._load()
 
     # ------------------------------------------------------------------ #
@@ -92,7 +95,7 @@ class IncidentManager:
                 })
             inc["updated"] = _now()
             inc_id = inc["id"]
-            self._save()
+            self._schedule_save()
 
         self._emit()
         return inc_id
@@ -113,7 +116,7 @@ class IncidentManager:
                     inc["updated"] = _now()
                     changed = True
             if changed:
-                self._save()
+                self._schedule_save()
         if changed:
             self._emit()
         return changed
@@ -266,3 +269,20 @@ class IncidentManager:
                     os.remove(tmp_path)
                 except OSError:
                     pass
+
+    def _schedule_save(self):
+        """고빈도 자동 병합은 묶어서 저장해 대형 JSON의 반복 fsync를 줄인다."""
+        if not self._save_debounce_seconds:
+            self._save()
+            return
+        if self._save_timer and self._save_timer.is_alive():
+            return
+
+        def flush():
+            with self._lock:
+                self._save_timer = None
+                self._save()
+
+        self._save_timer = threading.Timer(self._save_debounce_seconds, flush)
+        self._save_timer.daemon = True
+        self._save_timer.start()

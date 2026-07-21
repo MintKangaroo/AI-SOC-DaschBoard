@@ -78,7 +78,10 @@ def build_services(app, socketio):
     threat_detector.decision = decision   # 클러스터 prior → 알림 신뢰도 반영
     soar.decision            = decision   # AI/규칙 판정 → 클러스터 학습
 
-    incidents = IncidentManager(socketio)
+    incidents = IncidentManager(
+        socketio,
+        save_debounce_seconds=app.config.get("INCIDENT_SAVE_DEBOUNCE_SECONDS", 5),
+    )
     soar.incidents = incidents            # 정탐 알림 → 인시던트 자동 승격
 
     # 실제 SSH 인증 로그 감시 (auth.log) → BRUTE_FORCE 를 파이프라인에 주입

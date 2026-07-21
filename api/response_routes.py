@@ -77,6 +77,19 @@ def soar_review_approval(execution_id):
     return jsonify(result), codes.get(result.get("status"), 400)
 
 
+@api_bp.route("/soar/approvals/batch", methods=["POST"])
+def soar_batch_approval():
+    data = request.get_json(silent=True) or {}
+    execution_ids = data.get("execution_ids")
+    if not isinstance(execution_ids, list) or not execution_ids:
+        return jsonify({"error": "execution_ids 목록이 필요합니다"}), 400
+    reason = (data.get("reason") or "일괄 승인").strip()[:300]
+    result = _soar().approve_many(execution_ids, _actor(), reason)
+    audit_record("SOAR_BATCH_APPROVE", target=f"{result['requested']}건",
+                 detail=f"승인 {result['approved']} · 실패 {result['failed']} · {reason}")
+    return jsonify(result), (200 if result["ok"] else 409)
+
+
 @api_bp.route("/soar/unblock", methods=["POST"])
 def soar_unblock():
     data = request.get_json() or {}

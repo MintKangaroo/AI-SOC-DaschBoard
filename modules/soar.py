@@ -252,6 +252,24 @@ class SOAREngine:
         self._execution_finish(execution_id, "completed" if ok else "failed")
         return {"ok": ok, "status": "approved" if ok else "execution_failed"}
 
+    def approve_many(self, execution_ids, actor, reason="일괄 승인"):
+        """클라이언트가 확인한 스냅샷의 승인 요청만 최대 100건 처리한다."""
+        results = []
+        for execution_id in list(dict.fromkeys(execution_ids))[:100]:
+            try:
+                run_id = int(execution_id)
+            except (TypeError, ValueError):
+                continue
+            result = self.review_approval(run_id, "approve", actor, reason)
+            results.append({"id": run_id, **result})
+        return {
+            "ok": any(r.get("ok") for r in results),
+            "requested": len(results),
+            "approved": sum(1 for r in results if r.get("status") == "approved"),
+            "failed": sum(1 for r in results if r.get("status") != "approved"),
+            "results": results,
+        }
+
     def manual_unblock(self, ip):
         with self._lock:
             if ip not in self.blocked_ips:
