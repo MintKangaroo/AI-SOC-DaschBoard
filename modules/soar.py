@@ -19,7 +19,7 @@ import time
 import socket
 import threading
 import subprocess
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import deque, Counter
 
 from modules.playbooks import steps_for
@@ -48,6 +48,12 @@ class SOAREngine:
 
         self.block_mode = str(self.config.get("SOAR_BLOCK_MODE", "simulate")).lower()
         self.auto_block = str(self.config.get("SOAR_AUTO_BLOCK", "True")) == "True"
+        self.approval_required = bool(self.config.get("SOAR_APPROVAL_REQUIRED", False))
+        try:
+            self.approval_timeout_minutes = max(
+                1, int(self.config.get("SOAR_APPROVAL_TIMEOUT_MINUTES", 15)))
+        except (TypeError, ValueError):
+            self.approval_timeout_minutes = 15
         try:
             # 차단 자동 만료 TTL (시간) — 0 이면 영구 차단
             self.block_ttl_hours = float(self.config.get("SOAR_BLOCK_TTL_HOURS", 24))
@@ -159,11 +165,14 @@ class SOAREngine:
     # ------------------------------------------------------------------ #
 
     def get_status(self):
+        self._expire_approvals()
         with self._lock:
             return {
                 "stats": dict(self.stats),
                 "block_mode": self.block_mode,
                 "auto_block": self.auto_block,
+                "approval_required": self.approval_required,
+                "approval_timeout_minutes": self.approval_timeout_minutes,
                 "block_ttl_hours": self.block_ttl_hours,
                 "safety": {
                     "cgnat_protected": "100.64.0.0/10 (Tailscale)",
@@ -198,6 +207,50 @@ class SOAREngine:
 
     def manual_block(self, ip, reason="분석가 수동 차단"):
         return self._block_ip(ip, reason, playbook="MANUAL")
+
+    def manual_block_request(self, ip, reason="분석가 수동 차단"):
+        before = self._execution_id
+        ok = self._block_ip(ip, reason, playbook="MANUAL")
+        if ok and self.approval_required and self._execution_id > before:
+            return {"success": True, "status": "waiting_approval",
+                    "execution_id": self._execution_id}
+        return {"success": ok, "status": "executed" if ok else "rejected"}
+
+    def review_approval(self, execution_id, decision, actor, reason=""):
+        """대기 중인 IP 차단을 승인·거절·취소한다."""
+        self._expire_approvals()
+        entry, context = self.execution_store.get(execution_id)
+        if not entry:
+            return {"ok": False, "status": "not_found"}
+        if entry.get("status") != "waiting_approval":
+            return {"ok": False, "status": "not_pending"}
+        if decision not in ("approve", "reject", "cancel"):
+            return {"ok": False, "status": "invalid_decision"}
+        if not self._claim_pending_approval(execution_id):
+            return {"ok": False, "status": "not_pending"}
+        label = {"approve": "승인", "reject": "거절", "cancel": "취소"}[decision]
+        detail = f"{actor} {label}" + (f" · {reason}" if reason else "")
+        self._execution_step(execution_id, "approval",
+                             "completed" if decision == "approve" else "failed", detail)
+        self._set_execution_fields(execution_id, approval={
+            **entry.get("approval", {}), "decision": decision, "actor": actor,
+            "reason": str(reason or "")[:300],
+            "decided_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")})
+        if decision != "approve":
+            self._execution_step(execution_id, "block", "skipped", f"요청 {label}")
+            self._execution_step(execution_id, "log", "completed", "감사 로그 기록")
+            status = "cancelled" if decision == "cancel" else "rejected"
+            self._execution_finish(execution_id, status)
+            return {"ok": True, "status": status}
+        self._execution_step(execution_id, "block", "running", "승인된 차단 실행")
+        ok = self._block_ip(context.get("ip"), context.get("reason", "승인된 차단"),
+                            playbook=context.get("source_playbook", "MANUAL"),
+                            ttl_hours=context.get("ttl_hours"), bypass_approval=True)
+        self._execution_step(execution_id, "block", "completed" if ok else "failed",
+                             "차단 완료" if ok else "차단 실패 또는 중복")
+        self._execution_step(execution_id, "log", "completed", "감사 로그 기록")
+        self._execution_finish(execution_id, "completed" if ok else "failed")
+        return {"ok": ok, "status": "approved" if ok else "execution_failed"}
 
     def manual_unblock(self, ip):
         with self._lock:
@@ -244,6 +297,7 @@ class SOAREngine:
                 self._last_expiry_check = now
                 try:
                     self._expire_blocks()
+                    self._expire_approvals()
                 except Exception as e:
                     print(f"[SOAR] TTL 만료 처리 오류: {e}")
             if self._queue:
@@ -503,7 +557,7 @@ class SOAREngine:
     #  차단 실행
     # ------------------------------------------------------------------ #
 
-    def _block_ip(self, ip, reason, playbook, ttl_hours=None):
+    def _block_ip(self, ip, reason, playbook, ttl_hours=None, bypass_approval=False):
         if not ip:
             return False
 
@@ -519,6 +573,9 @@ class SOAREngine:
         with self._lock:
             if ip in self.blocked_ips:
                 return False   # 이미 차단됨
+
+        if self.approval_required and not bypass_approval:
+            return self._queue_block_approval(ip, reason, playbook, ttl_hours)
 
         mode, result = self.block_mode, "simulated"
         if self.block_mode == "ufw":
@@ -554,6 +611,68 @@ class SOAREngine:
                 self.incidents.attach_block(ip, reason)
             except Exception:
                 pass
+        return True
+
+    def _queue_block_approval(self, ip, reason, playbook, ttl_hours):
+        with self._lock:
+            duplicate = next((e for e in self.executions
+                              if e.get("status") == "waiting_approval"
+                              and e.get("approval", {}).get("ip") == ip), None)
+        if duplicate:
+            return True
+        expires = datetime.now() + timedelta(minutes=self.approval_timeout_minutes)
+        run_id = self._execution_start("PB-BLOCK-APPROVAL", ip, context={
+            "ip": ip, "reason": reason, "source_playbook": playbook,
+            "ttl_hours": ttl_hours})
+        self._execution_step(run_id, "request", "completed", f"{playbook} · {reason}")
+        self._execution_step(run_id, "safety", "completed", "안전 검사 통과")
+        self._execution_step(run_id, "approval", "running", "분석가 결정 대기")
+        self._set_execution_fields(run_id, status="waiting_approval", approval={
+            "ip": ip, "requested_by": playbook,
+            "expires_at": expires.strftime("%Y-%m-%d %H:%M:%S")})
+        self._log_action(playbook, "approval_request", ip, "waiting",
+                         f"차단 승인 대기 · {expires.strftime('%H:%M:%S')} 만료")
+        return True
+
+    def _expire_approvals(self):
+        now = datetime.now()
+        with self._lock:
+            pending = [(e["id"], e.get("approval", {}).get("expires_at"))
+                       for e in self.executions if e.get("status") == "waiting_approval"]
+        for run_id, expires in pending:
+            try:
+                expired = datetime.strptime(expires, "%Y-%m-%d %H:%M:%S") <= now
+            except (TypeError, ValueError):
+                expired = False
+            if expired:
+                if not self._claim_pending_approval(run_id):
+                    continue
+                self._execution_step(run_id, "approval", "failed", "승인 시간 만료")
+                self._execution_step(run_id, "block", "skipped", "미승인")
+                self._execution_step(run_id, "log", "completed", "만료 기록")
+                self._execution_finish(run_id, "expired")
+
+    def _claim_pending_approval(self, run_id):
+        """승인/거절/만료 중 하나만 처리하도록 메모리 상태를 원자 선점한다."""
+        with self._lock:
+            entry = next((e for e in self.executions if e["id"] == run_id), None)
+            if not entry or entry.get("status") != "waiting_approval":
+                return False
+            entry["status"] = "processing_approval"
+            snapshot = {**entry, "steps": [dict(s) for s in entry["steps"]]}
+            self.execution_store.save(snapshot)
+        self._emit_execution(snapshot)
+        return True
+
+    def _set_execution_fields(self, run_id, **fields):
+        with self._lock:
+            entry = next((e for e in self.executions if e["id"] == run_id), None)
+            if not entry:
+                return False
+            entry.update(fields)
+            snapshot = {**entry, "steps": [dict(s) for s in entry["steps"]]}
+            self.execution_store.save(snapshot)
+        self._emit_execution(snapshot)
         return True
 
     def _expire_blocks(self):

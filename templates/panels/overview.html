@@ -41,6 +41,33 @@
         </div>
       </div>
 
+      <!-- 중앙 흐름 제어: 여기서 판단하고 상세 탭에서 근거를 확인 -->
+      <div class="card-panel mb-3">
+        <div class="card-panel-header">
+          <i class="fa fa-sliders text-warning me-2"></i>AI 관제 흐름 제어
+          <span class="small text-muted ms-2">핵심 조치는 여기서 · 상세 근거는 각 전문 탭에서</span>
+          <button class="btn btn-xs btn-outline-secondary ms-auto" onclick="showPanel('soar')">SOAR 상세</button>
+          <button class="btn btn-xs btn-outline-secondary ms-1" onclick="showPanel('incidents')">인시던트 상세</button>
+        </div>
+        <div class="row g-2 p-2">
+          <div class="col-lg-4">
+            <div class="p-2 border border-secondary rounded h-100">
+              <div class="small fw-bold text-cyan mb-1">파이프라인 상태</div>
+              <div id="overview-flow-state" class="small text-muted">상태 확인 중…</div>
+            </div>
+          </div>
+          <div class="col-lg-8">
+            <div class="d-flex align-items-center mb-1">
+              <span class="small fw-bold text-warning">승인 대기 조치</span>
+              <span id="overview-approval-count" class="badge bg-secondary ms-2">0</span>
+            </div>
+            <div id="overview-approvals" class="priority-list" style="max-height:150px">
+              <div class="small text-muted py-2">대기 중인 조치 없음</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- 분석가 우선 처리 큐: 원시 통계보다 지금 조사할 항목을 먼저 노출 -->
       <div class="row g-3 mb-3" id="overview-priority-queue">
         <div class="col-lg-6">

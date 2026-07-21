@@ -386,6 +386,48 @@ def test_soar_retry_rejects_completed_execution(tmp_path):
     assert soar.retry_execution(result["execution_id"])["status"] == "not_failed"
 
 
+def make_approval_soar(tmp_path, timeout=15):
+    return SOAREngine(FakeSocketIO(), config={"SOAR_BLOCK_MODE": "simulate",
+                      "SOAR_AUTO_BLOCK": "True", "SOAR_APPROVAL_REQUIRED": True,
+                      "SOAR_APPROVAL_TIMEOUT_MINUTES": timeout},
+                      blocklist_path=str(tmp_path / "approval-blocklist.txt"))
+
+
+def test_soar_block_waits_for_analyst_approval(tmp_path):
+    soar = make_approval_soar(tmp_path)
+    result = soar.manual_block_request("8.8.4.4", "승인 테스트")
+    assert result["status"] == "waiting_approval"
+    assert "8.8.4.4" not in soar.blocked_ips
+    run = soar.get_status()["executions"][0]
+    assert run["status"] == "waiting_approval"
+    assert run["approval"]["requested_by"] == "MANUAL"
+
+    reviewed = soar.review_approval(run["id"], "approve", "analyst", "확인 완료")
+    assert reviewed["ok"] and "8.8.4.4" in soar.blocked_ips
+    completed = soar.get_status()["executions"][0]
+    assert completed["status"] == "completed"
+    assert completed["approval"]["actor"] == "analyst"
+
+
+def test_soar_block_rejection_never_executes(tmp_path):
+    soar = make_approval_soar(tmp_path)
+    result = soar.manual_block_request("9.9.9.9", "거절 테스트")
+    reviewed = soar.review_approval(result["execution_id"], "reject", "analyst", "근거 부족")
+    assert reviewed["status"] == "rejected"
+    assert "9.9.9.9" not in soar.blocked_ips
+    assert soar.review_approval(result["execution_id"], "approve", "analyst")["status"] == "not_pending"
+
+
+def test_soar_pending_approval_survives_restart(tmp_path):
+    first = make_approval_soar(tmp_path)
+    result = first.manual_block_request("7.7.7.7", "복원 테스트")
+    restored = make_approval_soar(tmp_path)
+    run = restored.get_status()["executions"][0]
+    assert run["id"] == result["execution_id"]
+    assert run["status"] == "waiting_approval"
+    assert restored.review_approval(run["id"], "cancel", "analyst")["status"] == "cancelled"
+
+
 def test_virustotal_enrichment_persists_on_alert(tmp_path):
     td = ThreatDetector(FakeSocketIO(), config={}, store_path=str(tmp_path / "alerts.db"))
     alert = Alert("EDR_THREAT", "HIGH", "host", "server", "malware",

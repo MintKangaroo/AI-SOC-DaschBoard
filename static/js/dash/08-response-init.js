@@ -92,6 +92,7 @@ function renderSoar(d) {
     ? '<span class="badge bg-success">VirusTotal 연결됨 · 해시 조회 전용</span>'
     : '<span class="badge bg-secondary">VirusTotal API 키 미설정</span>';
   renderSoarExecutions(d.executions || []);
+  renderOverviewFlowControl(d);
 
   // 차단 IP 목록
   const blBox = document.getElementById('soar-blocklist');
@@ -122,7 +123,9 @@ function renderSoar(d) {
 }
 
 const SOAR_RUN_STATE = {pending:'대기', running:'진행 중', completed:'완료',
-                        skipped:'건너뜀', failed:'실패'};
+                        skipped:'건너뜀', failed:'실패', waiting_approval:'승인 대기',
+                        processing_approval:'승인 처리 중', rejected:'거절',
+                        cancelled:'취소', expired:'만료'};
 function renderSoarExecutions(runs) {
   const box = document.getElementById('soar-executions');
   if (!box) return;
@@ -131,9 +134,10 @@ function renderSoarExecutions(runs) {
       <div class="d-flex align-items-center gap-2 small">
         <span class="pb-tag">${escapeHtml(run.playbook)}</span>
         <strong style="color:#e6edf3">${escapeHtml(run.target)}</strong>
-        <span class="ms-auto badge ${run.status === 'running' ? 'bg-info text-dark' : run.status === 'failed' ? 'bg-danger' : 'bg-success'}">${escapeHtml(SOAR_RUN_STATE[run.status] || run.status)}</span>
+        <span class="ms-auto badge ${run.status === 'running' ? 'bg-info text-dark' : run.status === 'waiting_approval' ? 'bg-warning text-dark' : ['failed','rejected','expired'].includes(run.status) ? 'bg-danger' : run.status === 'cancelled' ? 'bg-secondary' : 'bg-success'}">${escapeHtml(SOAR_RUN_STATE[run.status] || run.status)}</span>
         ${run.attempt > 1 ? `<span class="badge bg-secondary">${run.attempt}차 시도</span>` : ''}
         ${run.status === 'failed' && run.playbook === 'PB-MALWARE-ENRICH' ? `<button class="btn btn-xs btn-outline-warning" onclick="retrySoarExecution(${Number(run.id)})"><i class="fa fa-rotate-right me-1"></i>실패 단계 재시도</button>` : ''}
+        ${run.status === 'waiting_approval' ? `<button class="btn btn-xs btn-success" onclick="reviewSoarApproval(${Number(run.id)},'approve')">승인</button><button class="btn btn-xs btn-outline-danger" onclick="reviewSoarApproval(${Number(run.id)},'reject')">거절</button><button class="btn btn-xs btn-outline-secondary" onclick="reviewSoarApproval(${Number(run.id)},'cancel')">취소</button>` : ''}
         <span class="text-muted font-monospace" style="font-size:9px">${escapeHtml((run.started || '').split(' ')[1] || '')}</span>
       </div>
       <div class="soar-run-steps">${(run.steps || []).map(step => `
@@ -143,6 +147,39 @@ function renderSoarExecutions(runs) {
           ${step.detail ? `<div class="text-truncate mt-1">${escapeHtml(step.detail)}</div>` : ''}
         </div>`).join('')}</div>
     </div>`).join('') : '<div class="text-muted p-3 text-center small">실행 이력 없음</div>';
+}
+
+function reviewSoarApproval(id, decision) {
+  const labels = {approve:'승인', reject:'거절', cancel:'취소'};
+  const reason = prompt(`${labels[decision]} 사유를 입력하세요 (선택)`, '') ?? null;
+  if (reason === null) return;
+  fetch(`/api/soar/executions/${encodeURIComponent(id)}/approval`, {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({decision, reason})
+  }).then(async r => ({ok:r.ok, data:await r.json()})).then(({ok,data}) => {
+    if (!ok) throw new Error(data.status || '처리 실패');
+    loadSoar();
+  }).catch(e => alert(`승인 처리 실패: ${e.message}`));
+}
+
+function renderOverviewFlowControl(d) {
+  const runs = d.executions || [];
+  const pending = runs.filter(r => r.status === 'waiting_approval');
+  const running = runs.filter(r => r.status === 'running').length;
+  const failed = runs.filter(r => r.status === 'failed').length;
+  const state = document.getElementById('overview-flow-state');
+  if (state) state.innerHTML = `자동화 <b class="${d.auto_block ? 'text-success' : 'text-danger'}">${d.auto_block ? '활성' : '중지'}</b> · 승인 게이트 <b class="${d.approval_required ? 'text-warning' : 'text-muted'}">${d.approval_required ? `활성(${d.approval_timeout_minutes}분)` : '비활성'}</b> · 실행 중 <b class="text-info">${running}</b> · 실패 <b class="text-danger">${failed}</b>`;
+  const count = document.getElementById('overview-approval-count');
+  if (count) { count.textContent = pending.length; count.className = `badge ms-2 ${pending.length ? 'bg-warning text-dark' : 'bg-secondary'}`; }
+  const box = document.getElementById('overview-approvals');
+  if (box) box.innerHTML = pending.length ? pending.map(run => `
+    <div class="priority-item">
+      <div class="flex-fill clickable" onclick="showPanel('soar')">
+        <div class="priority-title"><span class="font-monospace">${escapeHtml(run.target)}</span> 차단 승인</div>
+        <div class="priority-meta">${escapeHtml(run.approval?.requested_by || '')} · ${escapeHtml(run.approval?.expires_at || '')} 만료</div>
+      </div>
+      <div class="d-flex gap-1 align-items-center"><button class="btn btn-xs btn-success" onclick="reviewSoarApproval(${Number(run.id)},'approve')">승인</button><button class="btn btn-xs btn-outline-danger" onclick="reviewSoarApproval(${Number(run.id)},'reject')">거절</button></div>
+    </div>`).join('') : '<div class="small text-muted py-2">대기 중인 조치 없음</div>';
 }
 
 function retrySoarExecution(id) {

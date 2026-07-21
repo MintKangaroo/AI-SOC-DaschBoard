@@ -109,6 +109,8 @@ class Config:
     # SOAR 자동 대응 설정
     SOAR_BLOCK_MODE = os.getenv("SOAR_BLOCK_MODE", "simulate")  # simulate | ufw | iptables
     SOAR_AUTO_BLOCK = os.getenv("SOAR_AUTO_BLOCK", "True")
+    SOAR_APPROVAL_REQUIRED = os.getenv("SOAR_APPROVAL_REQUIRED", "True") == "True"
+    SOAR_APPROVAL_TIMEOUT_MINUTES = int(os.getenv("SOAR_APPROVAL_TIMEOUT_MINUTES", 15))
     # 차단 자동 만료 (시간) — 0 이면 영구 차단
     SOAR_BLOCK_TTL_HOURS = float(os.getenv("SOAR_BLOCK_TTL_HOURS", 24))
     # 절대 차단 금지 IP/대역 (쉼표 구분, 대역은 "1.2.3." 형태 접두). 사설·Tailscale은 자동 보호

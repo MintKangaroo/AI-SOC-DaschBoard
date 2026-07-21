@@ -1,7 +1,7 @@
 """대응: SOAR · 인시던트 · 대시보드 요약
    (api_bp 공유 — api/routes.py 가 임포트해 라우트를 등록한다)"""
 from flask import request, jsonify, current_app
-from api._common import api_bp, get_services, _mitre, _hash_scan_allowed, audit_record
+from api._common import api_bp, get_services, _mitre, _hash_scan_allowed, audit_record, _actor
 
 
 # ------------------------------------------------------------------ #
@@ -55,10 +55,26 @@ def soar_block():
     if not ip:
         return jsonify({"error": "ip 가 필요합니다"}), 400
     reason = data.get("reason", "분석가 수동 차단")
-    ok = _soar().manual_block(ip, reason)
-    if ok:
-        audit_record("SOAR_BLOCK", target=ip, detail=reason)
-    return jsonify({"success": ok, "message": "차단됨" if ok else "이미 차단된 IP"})
+    result = _soar().manual_block_request(ip, reason)
+    if result["success"]:
+        action = "SOAR_APPROVAL_REQUEST" if result["status"] == "waiting_approval" else "SOAR_BLOCK"
+        audit_record(action, target=ip, detail=reason)
+    result["message"] = ("승인 대기" if result["status"] == "waiting_approval" else
+                         "차단됨" if result["success"] else "차단 요청 거부")
+    return jsonify(result)
+
+
+@api_bp.route("/soar/executions/<int:execution_id>/approval", methods=["POST"])
+def soar_review_approval(execution_id):
+    data = request.get_json(silent=True) or {}
+    decision = data.get("decision")
+    reason = (data.get("reason") or "").strip()
+    result = _soar().review_approval(execution_id, decision, _actor(), reason)
+    if result.get("ok"):
+        audit_record(f"SOAR_{decision.upper()}", target=f"실행 #{execution_id}", detail=reason)
+        return jsonify(result)
+    codes = {"not_found": 404, "not_pending": 409, "invalid_decision": 400}
+    return jsonify(result), codes.get(result.get("status"), 400)
 
 
 @api_bp.route("/soar/unblock", methods=["POST"])

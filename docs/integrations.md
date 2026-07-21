@@ -14,6 +14,22 @@
   복원한다. 재시도 실행에는 원본 ID(`retry_of`)와 시도 횟수(`attempt`)가 남는다.
 - 차단·트리아지처럼 부작용이 있는 플레이북은 중복 대응 방지를 위해 이 재시도
   API의 대상이 아니다.
+
+### SOAR 차단 승인 게이트
+
+기본 설정에서는 자동·수동 IP 차단이 즉시 실행되지 않고 `PB-BLOCK-APPROVAL`
+실행으로 전환된다. AI 관제 센터의 승인 큐 또는 SOAR 상세 탭에서 승인·거절·
+취소할 수 있으며, 승인한 로그인 사용자와 사유·시각은 실행 이력과 감사 로그에
+남는다. 승인 요청은 기본 15분 후 만료된다.
+
+```dotenv
+SOAR_APPROVAL_REQUIRED=True
+SOAR_APPROVAL_TIMEOUT_MINUTES=15
+```
+
+API에서는 `POST /api/soar/executions/{id}/approval`에
+`{"decision":"approve|reject|cancel", "reason":"..."}`를 전송한다. 승인된
+경우에만 방화벽 실행 경로로 진입하며 안전 목록 검사는 승인 요청 전에도 적용된다.
 - API 키 또는 해시가 없으면 단계가 `건너뜀`으로 표시되고 기존 트리아지는 계속된다.
 - SOAR 실행 현황에서 대기·진행·완료·건너뜀·실패 상태를 실시간 확인한다.
 - SOAR의 `EICAR 연결 테스트` 버튼은 안전한 테스트 해시로 인증·응답 파싱을 검증한다.
