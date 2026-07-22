@@ -28,7 +28,7 @@ PLAYBOOK_STEPS = {
         {"key": "notify",  "label": "정탐 확정 시 인시던트 승격·폰 통보", "kind": "notify"},
     ],
     "PB-AUTO-BLOCK": [
-        {"key": "gate",    "label": "정탐 + CRITICAL + 외부 IP + 신뢰도 80↑", "kind": "detect"},
+        {"key": "gate",    "label": "정탐 + CRITICAL + 외부 IP + 신뢰도 95↑ + 복수근거", "kind": "detect"},
         {"key": "safety",  "label": "안전장치 검사(사설·Tailscale·자기자신 제외)", "kind": "decide"},
         {"key": "block",   "label": "방화벽 차단(TTL 자동 만료)",         "kind": "contain"},
         {"key": "log",     "label": "감사 로그 기록",                     "kind": "followup"},
@@ -61,6 +61,15 @@ PLAYBOOK_STEPS = {
         {"key": "assess",  "label": "다중벡터/침투진행 위험도 산정",       "kind": "decide"},
         {"key": "escalate","label": "상관 알림 생성 → 인시던트 승격",      "kind": "contain"},
         {"key": "notify",  "label": "고위험 시 폰 통보",                  "kind": "notify"},
+    ],
+    "PB-DATA-EXFIL": [
+        {"key": "intake", "label": "내부→외부 유출 의심 알림 접수", "kind": "detect"},
+        {"key": "validate", "label": "전송량·목적지·허용목록 교차검증", "kind": "enrich"},
+        {"key": "preserve", "label": "호스트·세션·파일 증거 보존", "kind": "followup"},
+        {"key": "scope", "label": "영향 사용자·파일·외부 목적지 범위 산정", "kind": "decide"},
+        {"key": "contain", "label": "계정·세션 격리(분석가 승인 필요)", "kind": "contain"},
+        {"key": "case", "label": "자료 유출 인시던트 생성·타임라인 기록", "kind": "followup"},
+        {"key": "notify", "label": "담당 분석가·관리자 통보", "kind": "notify"},
     ],
     "PB-MALWARE-ENRICH": [
         {"key": "intake", "label": "악성코드·EDR·Sigma 알림 수신", "kind": "detect"},

@@ -171,6 +171,20 @@ sudo -n /usr/local/sbin/soc-ufw status
 검증 후에만 `.env`를 `SOAR_BLOCK_MODE=ufw`로 변경한다. 복수 근거·95%·분석가
 승인·TTL·allowlist 검사는 helper 호출 전에도 유지된다.
 
+## 내부 자료 유출 SIEM·SOAR
+
+`DATA_EXFIL`은 내부 호스트가 승인되지 않은 외부 목적지로 기본 5분 동안 500MB를
+초과 전송할 때 생성한다. 목적지 IP 또는 접두는 `DATA_EXFIL_ALLOWLIST`로 제외할
+수 있다. SIEM 상관 규칙은 다음 두 가지다.
+
+- `R-INTERNAL-EXFIL`: 대량 외부 전송 또는 DNS 터널링
+- `R-STAGING-EXFIL`: EDR/Sigma 수집·압축 징후 이후 같은 호스트의 외부 전송
+
+`PB-DATA-EXFIL`은 알림 원문·호스트·목적지·전송량을 보존하고 영향 사용자·파일
+범위를 조사할 인시던트를 만든다. 내부 호스트는 UFW로 자동 차단하지 않는다.
+계정 비활성화, 세션 종료, 엔드포인트 격리는 분석가가 증거를 확인한 뒤 별도로
+승인해야 한다.
+
 ### 지원 예정 시스템
 - Suricata
 - Zeek (Bro)

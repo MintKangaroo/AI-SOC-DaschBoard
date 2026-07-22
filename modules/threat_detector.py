@@ -113,6 +113,15 @@ class ThreatDetector:
                 (config or {}).get("ALERT_CONFIDENCE_THRESHOLD", 0.5))
         except (TypeError, ValueError):
             self.min_confidence = 0.5
+        try:
+            self.exfil_bytes_threshold = max(1, int(
+                (config or {}).get("DATA_EXFIL_BYTES_THRESHOLD", 500_000_000)))
+            self.exfil_window_seconds = max(10, int(
+                (config or {}).get("DATA_EXFIL_WINDOW_SECONDS", 300)))
+        except (TypeError, ValueError):
+            self.exfil_bytes_threshold, self.exfil_window_seconds = 500_000_000, 300
+        allow = str((config or {}).get("DATA_EXFIL_ALLOWLIST", "") or "")
+        self.exfil_allowlist = tuple(x.strip() for x in allow.split(",") if x.strip())
 
         self.alerts = deque(maxlen=500)
         self.alert_counts = defaultdict(int)
@@ -211,18 +220,20 @@ class ThreatDetector:
         """
         now = time.time()
 
-        # 내부/신뢰 IP는 DDoS·스캔 대상에서 제외 (FP 주범)
-        if self._is_trusted(src_ip):
-            return
+        # 내부/신뢰 IP는 DDoS·스캔에서만 제외한다. 내부→외부 유출 집계는 계속한다.
+        src_internal = self._is_internal(src_ip)
+        src_trusted = self._is_trusted(src_ip) or src_internal
 
         with self._win_lock:
             # ── DDoS: 3초 동안 지속적으로 2000pps 초과해야 경보 ──
-            self._ip_packet_window[src_ip].append(now)
-            self._ip_packet_window[src_ip] = [
-                t for t in self._ip_packet_window[src_ip] if now - t < 3.0
-            ]
-            avg_pps = len(self._ip_packet_window[src_ip]) / 3.0
-            ddos_hit = avg_pps > 2000
+            avg_pps, ddos_hit = 0, False
+            if not src_trusted:
+                self._ip_packet_window[src_ip].append(now)
+                self._ip_packet_window[src_ip] = [
+                    t for t in self._ip_packet_window[src_ip] if now - t < 3.0
+                ]
+                avg_pps = len(self._ip_packet_window[src_ip]) / 3.0
+                ddos_hit = avg_pps > 2000
             if ddos_hit:
                 # 쿨다운: 윈도우 비워서 재탐지 지연
                 self._ip_packet_window[src_ip].clear()
@@ -230,7 +241,7 @@ class ThreatDetector:
             # ── 포트 스캔: 30초 동안 고유 포트 40개 이상 + 저바이트 트래픽 ──
             scan_hit = False
             unique_ports = 0
-            if dst_port and length < 200:
+            if not src_trusted and dst_port and length < 200:
                 self._ip_port_window[src_ip].add((dst_port, now))
                 # 30초 이내 항목만 유지
                 self._ip_port_window[src_ip] = {
@@ -241,16 +252,19 @@ class ThreatDetector:
                 if scan_hit:
                     self._ip_port_window[src_ip].clear()
 
-            # ── 데이터 유출: 5분 동안 500MB 초과 + 외부 대상일 때만 ──
+            # ── 데이터 유출: 설정 윈도우 내 대량 전송 + 외부/비허용 목적지 ──
             exfil_hit = False
             total_bytes = 0
-            if self._is_external(dst_ip):
+            approved_dst = any(dst_ip == x or (x.endswith(".") and dst_ip.startswith(x))
+                               for x in self.exfil_allowlist) if dst_ip else False
+            if (src_internal and self._is_external(dst_ip) and not approved_dst):
                 self._ip_byte_window[src_ip].append((now, length))
                 self._ip_byte_window[src_ip] = [
-                    (t, b) for t, b in self._ip_byte_window[src_ip] if now - t < 300
+                    (t, b) for t, b in self._ip_byte_window[src_ip]
+                    if now - t < self.exfil_window_seconds
                 ]
                 total_bytes = sum(b for _, b in self._ip_byte_window[src_ip])
-                exfil_hit = total_bytes > 500_000_000  # 500MB/5min
+                exfil_hit = total_bytes > self.exfil_bytes_threshold
                 if exfil_hit:
                     self._ip_byte_window[src_ip].clear()
 
@@ -268,9 +282,16 @@ class ThreatDetector:
             ))
         if exfil_hit:
             self._add_alert(Alert(
-                "DATA_EXFIL", "HIGH", src_ip, dst_ip,
-                f"대량 외부 전송: {src_ip} → {total_bytes / 1e6:.1f} MB/5분",
-                {"bytes_per_5min": total_bytes},
+                "DATA_EXFIL",
+                "CRITICAL" if total_bytes >= self.exfil_bytes_threshold * 2 else "HIGH",
+                src_ip, dst_ip,
+                f"내부 자료 유출 의심: {src_ip} → {dst_ip} · "
+                f"{total_bytes / 1e6:.1f} MB/{self.exfil_window_seconds // 60}분",
+                {"bytes_in_window": total_bytes,
+                 "window_seconds": self.exfil_window_seconds,
+                 "threshold_bytes": self.exfil_bytes_threshold,
+                 "direction": "internal_to_external", "source": "packet_sensor",
+                 "evidence": ["high_volume_egress"], "demo": False},
             ))
 
     def _prune_windows(self):
@@ -314,6 +335,17 @@ class ThreatDetector:
         if ip.startswith(self._PRIVATE_PREFIXES):
             return False
         return True
+
+    def _is_internal(self, ip):
+        if not ip:
+            return False
+        if ip.startswith(self._PRIVATE_PREFIXES):
+            return True
+        try:
+            a, b = ip.split(".")[:2]
+            return int(a) == 100 and 64 <= int(b) <= 127
+        except (ValueError, IndexError):
+            return False
 
     def update_alert_status(self, alert_id, status, note=None, assignee=None):
         with self._lock:

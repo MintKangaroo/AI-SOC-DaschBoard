@@ -81,6 +81,7 @@ class SOAREngine:
         self.actions = deque(maxlen=300)   # 대응 이력
         self._action_id = 0
         self._triaged_alerts = set()       # 알림별 AI 트리아지 1회 제한
+        self._exfil_alerts = set()         # 자료 유출 조사 플레이북 중복 방지
         self._ai_calls = deque(maxlen=50)  # AI 호출 타임스탬프 (rate limit)
         self._siem_probe_counter = Counter()
         execution_db_path = execution_db_path or os.path.join(
@@ -104,7 +105,7 @@ class SOAREngine:
              "description": "HIGH/CRITICAL 알림을 Claude AI가 분석 — 오탐은 자동 종결+ML 피드백, 정탐은 에스컬레이션",
              "enabled": True, "runs": 0, "last_run": None},
             {"id": "PB-AUTO-BLOCK",   "name": "정탐 CRITICAL 자동 차단",
-             "description": "AI 정탐 판정(신뢰도 80+) + CRITICAL + 외부 IP → 방화벽 차단",
+             "description": "정탐 판정(신뢰도 95+) + CRITICAL + 독립근거 2개 + 외부 IP → 승인 후 차단",
              "enabled": True, "runs": 0, "last_run": None},
             {"id": "PB-SIEM-SCANNER", "name": "반복 스캐너 자동 차단",
              "description": "자동매매 서버 접근 로그에서 동일 IP가 프로브 3회 이상 → 차단",
@@ -120,6 +121,9 @@ class SOAREngine:
              "enabled": True, "runs": 0, "last_run": None},
             {"id": "PB-CORRELATED-ESCALATE", "name": "상관관계 발동 에스컬레이션",
              "description": "SIEM 상관관계 규칙(다중벡터·스캔→침투 등) 발동 → 인시던트 승격",
+             "enabled": True, "runs": 0, "last_run": None},
+            {"id": "PB-DATA-EXFIL", "name": "내부 자료 유출 조사·격리",
+             "description": "대량 외부 전송/DNS 터널링 → 증거 보존·범위 산정·인시던트 생성 (내부 호스트 자동 차단 금지)",
              "enabled": True, "runs": 0, "last_run": None},
             {"id": "PB-MALWARE-ENRICH", "name": "악성코드 VirusTotal 강화",
              "description": "악성코드·EDR·Sigma 알림의 해시를 추출해 VirusTotal 기존 분석 결과로 보강(파일 업로드 안 함)",
@@ -358,6 +362,11 @@ class SOAREngine:
                 threat_type in ("MALWARE_BEACON", "EDR_THREAT", "SIGMA_MATCH")):
             self._process_malware_enrichment(alert)
 
+        if (self._pb_enabled("PB-DATA-EXFIL") and
+                threat_type in ("DATA_EXFIL", "DNS_TUNNELING") and
+                alert_id not in self._exfil_alerts):
+            self._process_data_exfil(alert)
+
         # PB-BRUTE-BLOCK: AI 없이도 즉시 차단 (명백한 케이스)
         if (self._pb_enabled("PB-BRUTE-BLOCK") and self.auto_block
                 and threat_type == "BRUTE_FORCE"
@@ -422,6 +431,48 @@ class SOAREngine:
         self._execution_step(run_id, "ai", "completed", f"신뢰도 {confidence}%")
         self._apply_triage(alert, verdict, confidence, summary, ai=True,
                            execution_id=run_id)
+
+    def _process_data_exfil(self, alert):
+        """내부 자료 유출은 IP 차단 대신 증거 보존·케이스 기반으로 대응한다."""
+        alert_id = alert.get("id")
+        self._exfil_alerts.add(alert_id)
+        self._pb_counter("PB-DATA-EXFIL")
+        src, dst = alert.get("src_ip"), alert.get("dst_ip")
+        details = alert.get("details") or {}
+        amount = int(details.get("bytes_in_window") or
+                     details.get("bytes_per_5min") or 0)
+        target = f"알림 #{alert_id} · {src} → {dst or '외부'}"
+        run_id = self._execution_start("PB-DATA-EXFIL", target, context={
+            "alert_id": alert_id, "src_ip": src, "dst_ip": dst,
+            "bytes_out": amount, "containment": "analyst_required"})
+        self._execution_step(run_id, "intake", "completed", alert.get("description", ""))
+        self._execution_step(
+            run_id, "validate", "completed",
+            f"전송량 {amount / 1e6:.1f}MB · 목적지 {dst or '미상'} · 허용목록 미일치")
+        self._execution_step(run_id, "preserve", "completed",
+                             "알림 원문·호스트·목적지·전송량 스냅샷 저장")
+        self._execution_step(run_id, "scope", "completed",
+                             "사용자·프로세스·파일 목록은 인시던트에서 추가 조사")
+        self._execution_step(run_id, "contain", "skipped",
+                             "내부 호스트 자동 차단 금지 — 분석가가 계정/세션 격리 결정")
+        if self.threat_detector:
+            self.threat_detector.update_alert_status(
+                alert_id, "ACK", note="SOAR 자료 유출 조사 플레이북 — 증거 보존 및 수동 격리 검토",
+                assignee="SOAR")
+        inc_id = None
+        if self.incidents:
+            try:
+                inc_id = self.incidents.promote_alert(
+                    alert, "내부 자료 유출 의심 — 수동 범위 산정 및 격리 필요")
+            except Exception:
+                pass
+        self._execution_step(run_id, "case", "completed",
+                             f"인시던트 #{inc_id} 생성/병합" if inc_id else "인시던트 연계 없음")
+        self._execution_step(run_id, "notify", "completed", "SOAR 관제 큐에 우선 표시")
+        self._execution_finish(run_id, "completed")
+        self._log_action("PB-DATA-EXFIL", "preserve_escalate",
+                         f"알림 #{alert_id}", "success",
+                         f"{src} → {dst} · {amount / 1e6:.1f}MB · 내부 자동 차단 안 함")
 
     def _apply_triage(self, alert, is_tp, confidence, summary, ai=True, execution_id=None):
         alert_id = alert.get("id")

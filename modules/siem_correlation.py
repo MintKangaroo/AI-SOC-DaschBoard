@@ -10,6 +10,8 @@ SIEM 상관관계 분석 — 개별 알림(이벤트)들을 규칙으로 엮어 
   R-RECON-INTRUSION: 정찰(PORT_SCAN/ANOMALY) 이후 침투(HONEYPOT/BRUTE_FORCE/WEB_ATTACK/C2) → CRITICAL
   R-SUSTAINED-BRUTE: 한 IP가 윈도우 내 BRUTE_FORCE 5회↑ → 지속적 무차별 대입 (HIGH)
   R-DISTRIBUTED    : 같은 위협유형을 서로 다른 IP 6개↑가 동시 발생 → 분산 공격 (HIGH)
+  R-INTERNAL-EXFIL : 내부 호스트의 대량 외부 전송/DNS 터널링 → 자료 유출 의심 (CRITICAL)
+  R-STAGING-EXFIL  : 수집·압축/엔드포인트 징후 후 외부 전송 → 내부자 유출 (CRITICAL)
 
 발화 시 threat_detector.report_alert("CORRELATED", ...) 로 파이프라인에 재투입
 (SOAR PB-CORRELATED-ESCALATE 로 인시던트 승격). 규칙별 (규칙,IP) 쿨다운으로 중복 억제.
@@ -21,6 +23,8 @@ from collections import deque, defaultdict
 # 정찰/침투 위협 분류
 _RECON = {"PORT_SCAN", "ANOMALY", "NETWORK_ANOMALY"}
 _INTRUSION = {"HONEYPOT", "BRUTE_FORCE", "WEB_ATTACK", "MALWARE_BEACON", "EDR_THREAT", "SIGMA_MATCH"}
+_EXFIL = {"DATA_EXFIL", "DNS_TUNNELING"}
+_STAGING = {"EDR_THREAT", "SIGMA_MATCH", "ANOMALY"}
 
 
 class SIEMCorrelator:
@@ -36,6 +40,7 @@ class SIEMCorrelator:
         self.multi_vector_min = int(self.config.get("SIEM_CORR_MULTIVECTOR", 3))
         self.brute_min = int(self.config.get("SIEM_CORR_BRUTE", 5))
         self.distributed_min = int(self.config.get("SIEM_CORR_DISTRIBUTED", 6))
+        self.exfil_min_bytes = int(self.config.get("SIEM_EXFIL_MIN_BYTES", 500_000_000))
 
         self._by_ip = defaultdict(list)      # ip → [(ts, threat_type, severity)]
         self._by_type = defaultdict(list)    # threat_type → [(ts, ip)]
@@ -96,6 +101,10 @@ class SIEMCorrelator:
                      "desc": f"한 IP의 BRUTE_FORCE {self.brute_min}회↑"},
                     {"id": "R-DISTRIBUTED", "name": "분산 공격",
                      "desc": f"같은 위협유형을 서로 다른 IP {self.distributed_min}개↑ 동시"},
+                    {"id": "R-INTERNAL-EXFIL", "name": "내부 자료 유출",
+                     "desc": "내부 호스트의 대량 외부 전송 또는 DNS 터널링"},
+                    {"id": "R-STAGING-EXFIL", "name": "수집·압축 후 유출",
+                     "desc": "EDR/Sigma 수집 징후 이후 같은 호스트의 외부 전송"},
                 ],
                 "findings": list(reversed(list(self.findings)))[:100]}
 
@@ -107,14 +116,16 @@ class SIEMCorrelator:
         ip = alert.get("src_ip")
         ttype = alert.get("threat_type")
         sev = alert.get("severity", "MEDIUM")
+        details = alert.get("details") or {}
+        dst_ip = alert.get("dst_ip")
         if not ip or not ttype:
             return
         now = time.time()
         with self._lock:
-            self._by_ip[ip].append((now, ttype, sev))
+            self._by_ip[ip].append((now, ttype, sev, details, dst_ip))
             self._by_type[ttype].append((now, ip))
             self._prune(now)
-            hits = self._evaluate(ip, ttype, now)
+            hits = self._evaluate(ip, ttype, now, details, dst_ip)
         for f in hits:
             self._fire(f)
 
@@ -129,11 +140,35 @@ class SIEMCorrelator:
             if not self._by_type[t]:
                 del self._by_type[t]
 
-    def _evaluate(self, ip, ttype, now):
+    def _evaluate(self, ip, ttype, now, details=None, dst_ip=None):
         """윈도우 상태로 규칙 평가 → 발화 후보 리스트."""
+        details = details or {}
         out = []
         events = self._by_ip.get(ip, [])
         types = {e[1] for e in events}
+
+        # 내부 자료 유출: 탐지기가 이미 볼륨/외부 목적지를 검증한 DATA_EXFIL 또는
+        # DNS 터널링. 내부 호스트를 자동 차단하지 않고 SOAR 조사 플레이북으로 넘긴다.
+        if ttype in _EXFIL and self._is_internal(ip):
+            bytes_out = int(details.get("bytes_in_window") or
+                            details.get("bytes_per_5min") or 0)
+            volume_ok = ttype == "DNS_TUNNELING" or bytes_out >= self.exfil_min_bytes
+            if volume_ok:
+                out.append({"rule": "R-INTERNAL-EXFIL", "key": ip, "ip": ip,
+                            "severity": "CRITICAL", "dst_ip": dst_ip,
+                            "summary": (f"내부 자료 유출 의심 — {ip} → {dst_ip or '외부'} · "
+                                        f"{bytes_out / 1e6:.1f}MB" if bytes_out else
+                                        f"DNS 터널링 기반 자료 유출 의심 — {ip}"),
+                            "count": 1, "bytes_out": bytes_out,
+                            "evidence": [ttype, "internal_to_external"]})
+
+        if (types & _EXFIL) and (types & _STAGING) and self._is_internal(ip):
+            out.append({"rule": "R-STAGING-EXFIL", "key": ip, "ip": ip,
+                        "severity": "CRITICAL", "dst_ip": dst_ip,
+                        "summary": f"수집·압축 징후({', '.join(sorted(types & _STAGING))}) 후 "
+                                   f"외부 전송({', '.join(sorted(types & _EXFIL))})",
+                        "count": len(events),
+                        "evidence": sorted((types & _STAGING) | (types & _EXFIL))})
 
         # R-RECON-INTRUSION: 정찰 유형과 침투 유형이 같은 IP에 공존
         if (types & _RECON) and (types & _INTRUSION):
@@ -179,7 +214,9 @@ class SIEMCorrelator:
             record = {"timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
                       "rule": f["rule"], "ip": f["ip"], "severity": f["severity"],
                       "summary": f["summary"], "count": f.get("count", 0),
-                      "sources": f.get("sources")}
+                      "sources": f.get("sources"), "dst_ip": f.get("dst_ip"),
+                      "bytes_out": f.get("bytes_out", 0),
+                      "evidence": f.get("evidence", [])}
             self.findings.append(record)
 
         self.socketio.emit("siem_correlation", record)
@@ -191,6 +228,22 @@ class SIEMCorrelator:
                     "CORRELATED", f["severity"], f["ip"],
                     getattr(self.threat_detector, "_server_ip", "-"),
                     f"[상관관계/{f['rule']}] {f['summary']}",
-                    {"source": "siem_correlation", "rule": f["rule"], "count": f.get("count")})
+                    {"source": "siem_correlation", "rule": f["rule"],
+                     "count": f.get("count"), "dst_ip": f.get("dst_ip"),
+                     "bytes_out": f.get("bytes_out", 0),
+                     "evidence": f.get("evidence", [])})
             except Exception as e:
                 print(f"[SIEMCorr] 알림 전달 오류: {e}")
+
+    @staticmethod
+    def _is_internal(ip):
+        if not ip:
+            return False
+        if (ip.startswith(("10.", "192.168.", "127.")) or
+                any(ip.startswith(f"172.{n}.") for n in range(16, 32))):
+            return True
+        try:
+            a, b = ip.split(".")[:2]
+            return int(a) == 100 and 64 <= int(b) <= 127
+        except (ValueError, IndexError):
+            return False

@@ -20,6 +20,9 @@ class Config:
     PORT_SCAN_THRESHOLD = int(os.getenv("PORT_SCAN_THRESHOLD", 20))  # unique ports/sec
     # 정탐 신뢰도 임계값 (0~1) — 미만 알림은 '오탐 의심'으로 저장만 하고 실시간 표시 억제
     ALERT_CONFIDENCE_THRESHOLD = float(os.getenv("ALERT_CONFIDENCE_THRESHOLD", 0.5))
+    DATA_EXFIL_BYTES_THRESHOLD = int(os.getenv("DATA_EXFIL_BYTES_THRESHOLD", 500_000_000))
+    DATA_EXFIL_WINDOW_SECONDS = int(os.getenv("DATA_EXFIL_WINDOW_SECONDS", 300))
+    DATA_EXFIL_ALLOWLIST = os.getenv("DATA_EXFIL_ALLOWLIST", "")
 
     # Snort IDS fast-alert 연동 (탐지만 수행, 방화벽 차단은 SOAR가 별도 결정)
     SNORT_ENABLED = os.getenv("SNORT_ENABLED", "True")
@@ -38,6 +41,7 @@ class Config:
 
     # SIEM 접근 로그 소스 — "이름=경로;이름=경로" (비우면 기본 자동매매 KR/USA 로그)
     SIEM_ACCESS_LOGS = os.getenv("SIEM_ACCESS_LOGS", "")
+    SIEM_EXFIL_MIN_BYTES = int(os.getenv("SIEM_EXFIL_MIN_BYTES", 500_000_000))
 
     # Syslog 수신 (원격 침해시도 수집) — KR/USA 등이 syslog 로 전송
     SYSLOG_ENABLED = os.getenv("SYSLOG_ENABLED", "True")   # 수신기 활성 여부

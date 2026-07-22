@@ -13,6 +13,8 @@ const CORR_RULE_KO = {
   'R-RECON-INTRUSION': '정찰→침투',
   'R-SUSTAINED-BRUTE': '지속 브루트',
   'R-DISTRIBUTED': '분산 공격',
+  'R-INTERNAL-EXFIL': '내부 자료 유출',
+  'R-STAGING-EXFIL': '수집→유출',
 };
 
 function renderSiemCorrelation(d) {
@@ -56,7 +58,8 @@ function corrFindingRow(f) {
       <td class="small"><span class="badge bg-info text-dark" style="font-size:9px">${escapeHtml(CORR_RULE_KO[f.rule] || f.rule)}</span></td>
       <td class="small font-monospace" style="color:#e6edf3">${escapeHtml(f.ip)}</td>
       <td class="small"><span class="badge ${sevCls}" style="font-size:9px">${escapeHtml(f.severity)}</span></td>
-      <td class="small" style="color:#cdd9e5">${escapeHtml(f.summary)}</td>
+      <td class="small" style="color:#cdd9e5">${escapeHtml(f.summary)}
+        ${f.dst_ip ? `<div class="text-muted font-monospace" style="font-size:10px">목적지 ${escapeHtml(f.dst_ip)}${f.bytes_out ? ` · ${(Number(f.bytes_out)/1e6).toFixed(1)}MB` : ''}</div>` : ''}</td>
     </tr>`;
 }
 

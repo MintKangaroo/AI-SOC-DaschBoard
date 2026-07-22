@@ -22,6 +22,10 @@ Flask 및 Flask-SocketIO 기반 실시간 SOC 대시보드다. 패킷·Sysmon·S
 
 최근 추가 기능:
 
+- 내부 자료 유출 대응 추가: 내부→비허용 외부 목적지 대량 전송과 DNS 터널링,
+  수집·압축 후 유출을 SIEM `R-INTERNAL-EXFIL/R-STAGING-EXFIL`로 상관 분석한다.
+  SOAR `PB-DATA-EXFIL`은 증거 보존·범위 산정·인시던트 생성까지만 자동 수행하고
+  내부 호스트/계정 격리는 분석가 결정으로 남긴다.
 - 실운영 전환: 로컬 `.env`는 `DEMO_MODE=False`. 알림에 origin과 분석가 확정
   판정(미판정/조사/정탐/오탐, 담당자·근거·시각)을 별도 저장한다.
 - Snort SID별 확정 품질 통계 및 `SNORT_BLOCK_EXCLUDED_SIDS` 지원. 기본 SID 254는

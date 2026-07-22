@@ -1312,3 +1312,34 @@ def test_ip_reputation_real_mode_never_falls_back_to_fake_score():
     result = rep.check("8.8.8.8")
     assert result["source"] == "unavailable"
     assert result["score"] == 0
+
+
+def test_internal_to_external_exfil_detection_and_allowlist():
+    td = ThreatDetector(FakeSocketIO(), {
+        "DATA_EXFIL_BYTES_THRESHOLD": 100,
+        "DATA_EXFIL_WINDOW_SECONDS": 300,
+    }, store_path=None)
+    td.analyze_packet("192.168.1.10", "8.8.8.8", 443, "TCP", 101)
+    alert = td.get_alerts()[0]
+    assert alert["threat_type"] == "DATA_EXFIL"
+    assert alert["details"]["direction"] == "internal_to_external"
+
+    allowed = ThreatDetector(FakeSocketIO(), {
+        "DATA_EXFIL_BYTES_THRESHOLD": 100, "DATA_EXFIL_ALLOWLIST": "8.8.8.8",
+    }, store_path=None)
+    allowed.analyze_packet("192.168.1.10", "8.8.8.8", 443, "TCP", 1000)
+    assert allowed.get_alerts() == []
+
+
+def test_soar_exfil_preserves_evidence_without_blocking_internal_host(tmp_path):
+    td = make_detector()
+    soar = make_soar(tmp_path, td=td)
+    soar.incidents = IncidentManager(store_path=str(tmp_path / "exfil.db"))
+    alert = Alert("DATA_EXFIL", "CRITICAL", "192.168.1.10", "8.8.8.8", "유출", {
+        "bytes_in_window": 800_000_000, "evidence": ["high_volume_egress"]})
+    td._add_alert(alert)
+    soar._process_data_exfil(alert.to_dict())
+    runs = [r for r in soar.executions if r["playbook"] == "PB-DATA-EXFIL"]
+    assert runs and runs[-1]["status"] == "completed"
+    assert soar.blocked_ips == {}
+    assert soar.incidents.get_stats()["total"] == 1

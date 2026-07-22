@@ -8,7 +8,7 @@
 |---------|------|------|--------|------------|
 | NET-001 | DDoS SYN Flood | 동일 IP 1초 내 1,000+ pps | CRITICAL | `DDOS_PACKET_THRESHOLD` |
 | NET-002 | 포트 스캔 | 동일 IP 1초 내 20+ 고유 포트 | HIGH | `PORT_SCAN_THRESHOLD` |
-| NET-003 | 대용량 데이터 유출 | 동일 IP 1분 내 100MB+ 전송 | HIGH | 코드 수정 필요 |
+| NET-003 | 내부 자료 대량 유출 | 내부 IP가 비허용 외부 목적지로 기본 5분 내 500MB+ 전송 | HIGH/CRITICAL | `DATA_EXFIL_*` 설정 및 allowlist 지원 |
 | NET-004 | ARP 스푸핑 | 게이트웨이 MAC 위장 | MEDIUM | - |
 | NET-005 | DNS 터널링 | 비정상 DNS 쿼리 길이/빈도 | MEDIUM | - |
 

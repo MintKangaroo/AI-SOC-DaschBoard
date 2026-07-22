@@ -841,6 +841,21 @@ def test_corr_distributed():
     assert dist and dist[0]["count"] >= 6
 
 
+def test_corr_internal_data_exfil_and_staging():
+    td = _FakeTD()
+    sc = _mk_corr(td, SIEM_EXFIL_MIN_BYTES=500_000_000)
+    sc.feed({"src_ip": "192.168.1.20", "dst_ip": "8.8.8.8",
+             "threat_type": "SIGMA_MATCH", "severity": "HIGH"})
+    sc.feed({"src_ip": "192.168.1.20", "dst_ip": "8.8.8.8",
+             "threat_type": "DATA_EXFIL", "severity": "CRITICAL",
+             "details": {"bytes_in_window": 800_000_000}})
+    rules = {f["rule"] for f in sc.findings}
+    assert "R-INTERNAL-EXFIL" in rules
+    assert "R-STAGING-EXFIL" in rules
+    correlated = [a for a in td.alerts if a[0] == "CORRELATED"]
+    assert correlated and correlated[-1][-1]["evidence"]
+
+
 def test_corr_cooldown_dedup():
     td = _FakeTD()
     sc = _mk_corr(td, SIEM_CORR_COOLDOWN=999)
