@@ -977,7 +977,8 @@ def test_net_malicious_conn_raises_event():
     # DEMO_BAD_IPS 로 아웃바운드 연결 → 악성 연결 이벤트
     n._finalize(
         [{"laddr": "10.0.0.2:44100", "raddr": "45.155.205.233:4444",
-          "rip": "45.155.205.233", "status": "ESTABLISHED", "proc": "bash", "external": True}],
+          "rip": "45.155.205.233", "status": "ESTABLISHED", "proc": "bash",
+          "external": True, "demo": True}],
         [], {"45.155.205.233"})
     assert n.stats["malicious_conns"] >= 1
     assert any(e["kind"] == "MALICIOUS_CONN" for e in n.events)
@@ -1303,3 +1304,11 @@ def test_alert_verdict_and_production_cutover_are_lossless(tmp_path):
     stats = store.retention_stats()
     assert stats["live"] == 0 and stats["archived"] == 1
     assert store.max_id() == alert.id
+
+
+def test_ip_reputation_real_mode_never_falls_back_to_fake_score():
+    rep = IPReputation(FakeSocketIO(), {"ABUSEIPDB_API_KEY": ""})
+    rep.start(demo=False)
+    result = rep.check("8.8.8.8")
+    assert result["source"] == "unavailable"
+    assert result["score"] == 0

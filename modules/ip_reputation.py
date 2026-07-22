@@ -8,6 +8,7 @@ IP 평판 조회 (AbuseIPDB) 모듈
             (무료 1,000 req/day — 캐시로 호출 최소화)
   - 데모모드: 키 없거나 조회 실패 시 결정론적 가짜 점수로 fallback
             (threat_intel 데모 악성 IP 목록은 높은 점수로 매핑)
+  - 실전모드: 키 없음/API 실패 시 unavailable/0점 (가짜 점수 절대 사용 안 함)
 
 반환 스키마(check):
   {ip, score(0~100), total_reports, country, isp, domain, usage_type,
@@ -53,6 +54,7 @@ class IPReputation:
         self.socketio = socketio
         self.config = config or {}
         self.running = False
+        self.demo_allowed = True
         self._lock = threading.Lock()
 
         self.api_key = (self.config.get("ABUSEIPDB_API_KEY") or "").strip()
@@ -84,7 +86,8 @@ class IPReputation:
 
     def start(self, demo=True):
         self.running = True
-        mode = "demo"
+        self.demo_allowed = bool(demo)
+        mode = "demo" if demo else "unavailable"
         if self.api_key and REQUESTS_OK and not demo:
             mode = "abuseipdb"
         elif self.api_key and REQUESTS_OK and demo:
@@ -94,8 +97,10 @@ class IPReputation:
             self.stats["mode"] = mode
         if mode == "abuseipdb":
             print("[IPRep] AbuseIPDB 실조회 활성 — 공격 IP 평판을 API로 확인합니다.")
-        else:
+        elif mode == "demo":
             print("[IPRep] ABUSEIPDB_API_KEY 없음 — 데모 평판 점수로 fallback.")
+        else:
+            print("[IPRep] AbuseIPDB 미설정 — 실전 모드에서는 평판 점수를 생성하지 않습니다.")
 
     def stop(self):
         self.running = False
@@ -178,8 +183,19 @@ class IPReputation:
             r = self._lookup_abuseipdb(ip)
             if r is not None:
                 return r
-            # API 실패 → 데모로 폴백(조용한 실패 방지 위해 error 카운트는 위에서 증가)
-        return self._lookup_demo(ip)
+            # 실전 모드 API 실패는 가짜 점수로 대체하지 않는다.
+            if not self.demo_allowed:
+                return self._unavailable(ip)
+        if mode == "demo":
+            return self._lookup_demo(ip)
+        return self._unavailable(ip)
+
+    @staticmethod
+    def _unavailable(ip):
+        return {"ip": ip, "score": 0, "total_reports": 0, "country": None,
+                "isp": None, "domain": None, "usage_type": None,
+                "last_reported": None, "source": "unavailable", "cached": False,
+                "checked_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
 
     def _lookup_abuseipdb(self, ip):
         try:

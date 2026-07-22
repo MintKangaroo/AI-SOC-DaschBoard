@@ -11,4 +11,14 @@ printf '%s ALL=(root) NOPASSWD: /usr/local/sbin/soc-ufw *\n' "$user_name" > "$su
 chmod 0440 "$sudoers_file"
 visudo -cf "$sudoers_file"
 /usr/local/sbin/soc-ufw status
+runuser -u "$user_name" -- sudo -n /usr/local/sbin/soc-ufw status
+env_file="$repo_dir/.env"
+if [[ -f "$env_file" ]]; then
+  if grep -q '^SOAR_BLOCK_MODE=' "$env_file"; then
+    sed -i 's/^SOAR_BLOCK_MODE=.*/SOAR_BLOCK_MODE=ufw/' "$env_file"
+  else
+    printf '\nSOAR_BLOCK_MODE=ufw\n' >> "$env_file"
+  fi
+fi
 echo "제한 helper 설치 완료: $sudoers_file"
+echo "SOAR_BLOCK_MODE=ufw 반영 완료 — 대시보드를 재시작하세요."

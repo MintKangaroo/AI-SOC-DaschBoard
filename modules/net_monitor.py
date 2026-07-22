@@ -246,7 +246,10 @@ class NetworkMonitor:
                     rep = self.ip_reputation.check(rip)
                 except Exception:
                     continue
-                if rep.get("score", 0) >= getattr(self.ip_reputation, "min_score", 75):
+                trusted_rep = (rep.get("source") == "abuseipdb" or
+                               (c.get("demo") and rep.get("source") == "demo"))
+                if (trusted_rep and
+                        rep.get("score", 0) >= getattr(self.ip_reputation, "min_score", 75)):
                     self._alerted_ips.add(rip)
                     with self._lock:
                         self.stats["malicious_conns"] += 1
