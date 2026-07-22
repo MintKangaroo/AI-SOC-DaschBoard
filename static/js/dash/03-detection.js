@@ -41,6 +41,16 @@ function confBadge(alert) {
   return ` <span class="badge ${cls}" style="font-size:9px" title="정탐 신뢰도">${Math.round(c*100)}%</span>`;
 }
 
+function verdictBadge(alert) {
+  const map = {
+    UNREVIEWED: ['bg-secondary', '미판정'], INVESTIGATING: ['bg-info text-dark', '조사 중'],
+    TRUE_POSITIVE: ['bg-danger', '정탐 확정'], FALSE_POSITIVE: ['bg-success', '오탐 확정'],
+  };
+  const [cls, label] = map[alert.verdict] || map.UNREVIEWED;
+  const title = [alert.verdict_actor, alert.verdict_at, alert.verdict_reason].filter(Boolean).join(' · ');
+  return `<span class="badge ${cls}" title="${escapeHtml(title)}">${label}</span>`;
+}
+
 function prependAlertRow(alert, prepend = true, draw = true) {
   const tbody = document.getElementById('alerts-tbody');
   if (!tbody) return;
@@ -53,15 +63,19 @@ function prependAlertRow(alert, prepend = true, draw = true) {
     <td>${escapeHtml(alert.timestamp)}</td>
     <td>${sevBadge(alert.severity)}</td>
     <td><span style="color:${threatColor(alert.threat_type)}">${escapeHtml(alert.threat_label)}</span>${confBadge(alert)}${demoBadge(alert.details)}</td>
+    <td>${alert.origin === 'demo' ? '<span class="badge demo-badge">데모</span>' : alert.origin === 'real' ? '<span class="badge bg-primary">실데이터</span>' : '<span class="badge bg-secondary">기존</span>'}</td>
     <td class="font-monospace">${escapeHtml(alert.src_ip)}</td>
     <td class="font-monospace">${escapeHtml(alert.dst_ip)}</td>
     <td>${escapeHtml(alert.description)}</td>
     <td><span class="badge bg-${statusColors[alert.status]}">${statusLabels[alert.status]}</span></td>
+    <td>${verdictBadge(alert)}</td>
     <td>
       <button class="btn btn-xs btn-outline-info me-1" onclick="analyzeAlertAI(${alert.id})">
         <i class="fa fa-robot"></i>
       </button>
       <button class="btn btn-xs btn-outline-warning me-1" onclick="updateAlertStatus(${alert.id},'ACK')">확인</button>
+      <button class="btn btn-xs btn-outline-danger me-1" onclick="setAlertVerdict(${alert.id},'TRUE_POSITIVE')">정탐</button>
+      <button class="btn btn-xs btn-outline-success me-1" onclick="setAlertVerdict(${alert.id},'FALSE_POSITIVE')">오탐</button>
       <button class="btn btn-xs btn-outline-secondary" onclick="updateAlertStatus(${alert.id},'CLOSED')">종료</button>
     </td>`;
   // 실시간 이벤트가 장시간 누적되어 DOM/DataTables가 느려지는 것을 방지한다.
@@ -90,7 +104,7 @@ function updateAlertStatus(id, status) {
     if (row) {
       const badges = { OPEN:'danger', ACK:'warning', CLOSED:'secondary' };
       const labels = { OPEN:'미처리', ACK:'확인됨', CLOSED:'종료' };
-      row.querySelector('td:nth-child(7)').innerHTML =
+      row.querySelector('td:nth-child(8)').innerHTML =
         `<span class="badge bg-${badges[status]}">${labels[status]}</span>`;
     }
     // ACK / CLOSED 모두 미처리 수에서 제외
@@ -100,6 +114,19 @@ function updateAlertStatus(id, status) {
     if (status === 'CLOSED') {
       incEl('kpi-blocked');
     }
+  });
+}
+
+function setAlertVerdict(id, verdict) {
+  const label = verdict === 'TRUE_POSITIVE' ? '정탐' : '오탐';
+  const reason = prompt(`${label} 확정 근거를 입력하세요 (필수)`);
+  if (reason == null) return;
+  fetch(`/api/alerts/${id}/verdict`, {
+    method: 'PUT', headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({verdict, reason}),
+  }).then(async r => ({ok:r.ok, body:await r.json()})).then(({ok, body}) => {
+    if (!ok) { alert(body.error || '판정 저장 실패'); return; }
+    loadAlerts();
   });
 }
 
@@ -120,7 +147,7 @@ function filterAlertsByStatus(statusLabel) {
   const q = mapKo[statusLabel] || statusLabel;
   setTimeout(() => {
     if (alertsDataTable) {
-      alertsDataTable.column(6).search(q, false, false).draw();
+      alertsDataTable.column(7).search(q, false, false).draw();
     }
   }, 150);
 }

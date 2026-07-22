@@ -82,6 +82,7 @@ def build_services(app, socketio):
 
     incidents = IncidentManager(
         socketio,
+        store_path="data/incidents.db",
         save_debounce_seconds=app.config.get("INCIDENT_SAVE_DEBOUNCE_SECONDS", 5),
     )
     soar.incidents = incidents            # 정탐 알림 → 인시던트 자동 승격

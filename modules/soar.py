@@ -19,6 +19,7 @@ import time
 import socket
 import threading
 import subprocess
+import ipaddress
 from datetime import datetime, timedelta
 from collections import deque, Counter
 
@@ -47,6 +48,8 @@ class SOAREngine:
         self._queue = deque(maxlen=500)
 
         self.block_mode = str(self.config.get("SOAR_BLOCK_MODE", "simulate")).lower()
+        self.firewall_helper = str(self.config.get(
+            "SOAR_FIREWALL_HELPER", "/usr/local/sbin/soc-ufw"))
         self.auto_block = str(self.config.get("SOAR_AUTO_BLOCK", "True")) == "True"
         self.approval_required = bool(self.config.get("SOAR_APPROVAL_REQUIRED", False))
         self.min_block_confidence = int(self.config.get("SOAR_MIN_BLOCK_CONFIDENCE", 95))
@@ -135,7 +138,8 @@ class SOAREngine:
         print(f"[SOAR] 엔진 시작 — 차단 모드: {self.block_mode}, 자동 차단: {self.auto_block}")
         # 실차단 모드인데 sudo 가 안 되면 명확히 경고 (조용한 폴백 방지)
         if self.block_mode in ("ufw", "iptables"):
-            if self._run_fw(["sudo", "-n", "true"]):
+            if (self.block_mode == "ufw" and
+                    self._run_fw(["sudo", "-n", self.firewall_helper, "status"])):
                 print(f"[SOAR] 실차단 활성 — {self.block_mode} 방화벽 규칙을 실제 적용합니다.")
             else:
                 print(f"[SOAR] ⚠ 경고: {self.block_mode} 모드이나 passwordless sudo 불가 "
@@ -284,7 +288,7 @@ class SOAREngine:
             del self.blocked_ips[ip]
             self._save_blocklist()
         if mode == "ufw":
-            self._run_fw(["sudo", "-n", "ufw", "delete", "deny", "from", ip])
+            self._run_ufw("unblock", ip)
         elif mode == "iptables":
             self._run_fw(["sudo", "-n", "iptables", "-D", "INPUT", "-s", ip, "-j", "DROP"])
         self._log_action("MANUAL", "unblock", ip, "success", "차단 해제")
@@ -506,6 +510,8 @@ class SOAREngine:
     def _block_evidence(alert):
         """서로 독립적인 자동 차단 근거만 반환한다."""
         details = alert.get("details") or {}
+        if details.get("block_excluded"):
+            return []
         evidence = set(details.get("evidence") or [])
         if details.get("source") == "snort":
             evidence.add("snort_signature")
@@ -641,7 +647,7 @@ class SOAREngine:
 
         mode, result = self.block_mode, "simulated"
         if self.block_mode == "ufw":
-            ok = self._run_fw(["sudo", "-n", "ufw", "insert", "1", "deny", "from", ip])
+            ok = self._run_ufw("block", ip)
             result = "success" if ok else "simulated (ufw 실패)"
             mode = "ufw" if ok else "simulate"
         elif self.block_mode == "iptables":
@@ -750,7 +756,7 @@ class SOAREngine:
         for ip, info in expired:
             mode = info.get("mode", "simulate")
             if mode == "ufw":
-                self._run_fw(["sudo", "-n", "ufw", "delete", "deny", "from", ip])
+                self._run_ufw("unblock", ip)
             elif mode == "iptables":
                 self._run_fw(["sudo", "-n", "iptables", "-D", "INPUT", "-s", ip, "-j", "DROP"])
             self._log_action("TTL", "unblock", ip, "success",
@@ -763,6 +769,9 @@ class SOAREngine:
             return r.returncode == 0
         except Exception:
             return False
+
+    def _run_ufw(self, action, ip):
+        return self._run_fw(["sudo", "-n", self.firewall_helper, action, ip])
 
     # ------------------------------------------------------------------ #
     #  유틸
@@ -903,6 +912,12 @@ class SOAREngine:
         """차단 가능 여부 검사 (자가 락아웃 방지). 반환: (bool, 사유 or None)"""
         if not ip:
             return False, "빈 IP"
+        try:
+            addr = ipaddress.ip_address(str(ip))
+        except ValueError:
+            return False, "유효하지 않은 IP"
+        if addr.version != 4 or not addr.is_global:
+            return False, "공개 IPv4 아님"
         if ip.startswith(self._PRIVATE_PREFIXES):
             return False, "사설 IP"
         if self._is_cgnat(ip):

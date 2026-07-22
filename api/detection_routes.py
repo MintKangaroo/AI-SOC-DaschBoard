@@ -80,6 +80,8 @@ def alerts_history():
         severity=a.get("severity") or None,
         status=a.get("status") or None,
         threat_type=a.get("threat_type") or None,
+        verdict=a.get("verdict") or None,
+        origin=a.get("origin") or None,
         ip=(a.get("ip") or "").strip() or None,
         text=(a.get("text") or "").strip() or None,
         date_from=a.get("from") or None,
@@ -184,6 +186,28 @@ def update_alert_status(alert_id):
                "OPEN": "ALERT_REOPEN"}.get(status, "ALERT_ACK")
         audit_record(act, target=f"알림 #{alert_id}", detail=data.get("note") or "")
     return jsonify({"success": ok})
+
+
+@api_bp.route("/alerts/<int:alert_id>/verdict", methods=["PUT"])
+def update_alert_verdict(alert_id):
+    """분석가의 근거 기반 정·오탐 확정. 처리 상태와 별도로 저장한다."""
+    _, td, *_ = get_services()
+    data = request.get_json(silent=True) or {}
+    verdict = data.get("verdict")
+    allowed = ("UNREVIEWED", "INVESTIGATING", "TRUE_POSITIVE", "FALSE_POSITIVE")
+    if verdict not in allowed:
+        return jsonify({"error": "유효하지 않은 판정"}), 400
+    reason = str(data.get("reason") or "").strip()[:500]
+    if verdict in ("TRUE_POSITIVE", "FALSE_POSITIVE") and len(reason) < 3:
+        return jsonify({"error": "확정 판정에는 근거를 3자 이상 입력하세요"}), 400
+    actor = str(request.cookies.get("user") or "")
+    from flask import session
+    actor = session.get("user") or actor or "analyst"
+    ok = td.set_alert_verdict(alert_id, verdict, actor, reason)
+    if ok:
+        audit_record("ALERT_VERDICT", target=f"알림 #{alert_id}",
+                     detail=f"{verdict} · {reason}")
+    return jsonify({"success": ok, "verdict": verdict})
 
 
 # ------------------------------------------------------------------ #

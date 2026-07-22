@@ -59,6 +59,11 @@ class Alert:
         self.status = "OPEN"  # OPEN / ACK / CLOSED
         self.note = ""
         self.assignee = ""
+        self.origin = "demo" if self.details.get("demo") else "real"
+        self.verdict = "UNREVIEWED"
+        self.verdict_actor = ""
+        self.verdict_reason = ""
+        self.verdict_at = ""
 
     def to_dict(self):
         return {
@@ -75,6 +80,11 @@ class Alert:
             "status": self.status,
             "note": self.note,
             "assignee": self.assignee,
+            "origin": self.origin,
+            "verdict": self.verdict,
+            "verdict_actor": self.verdict_actor,
+            "verdict_reason": self.verdict_reason,
+            "verdict_at": self.verdict_at,
             "confidence": getattr(self, "confidence", None),
         }
 
@@ -151,6 +161,11 @@ class ThreatDetector:
             alert.status = row["status"]
             alert.note = row["note"]
             alert.assignee = row["assignee"]
+            alert.origin = row.get("origin", "unknown")
+            alert.verdict = row.get("verdict", "UNREVIEWED")
+            alert.verdict_actor = row.get("verdict_actor", "")
+            alert.verdict_reason = row.get("verdict_reason", "")
+            alert.verdict_at = row.get("verdict_at", "")
             details = row["details"] if isinstance(row["details"], dict) else {}
             alert.confidence = details.get("confidence")
             self.alerts.append(alert)
@@ -335,6 +350,23 @@ class ThreatDetector:
                 found = self.store.update_details(alert_id, details) or found
             except Exception:
                 pass
+        return found
+
+    def set_alert_verdict(self, alert_id, verdict, actor, reason=""):
+        from datetime import datetime
+        decided_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        found = False
+        with self._lock:
+            for alert in self.alerts:
+                if alert.id == alert_id:
+                    alert.verdict, alert.verdict_actor = verdict, actor
+                    alert.verdict_reason, alert.verdict_at = reason, decided_at
+                    found = True
+                    break
+        if self.store:
+            found = self.store.set_verdict(alert_id, verdict, actor, reason, decided_at) or found
+        if found and self.decision and verdict in ("TRUE_POSITIVE", "FALSE_POSITIVE"):
+            self.decision.record_verdict(alert_id, verdict == "TRUE_POSITIVE", source="분석가")
         return found
 
     def get_alerts(self, limit=100, severity=None, status=None):

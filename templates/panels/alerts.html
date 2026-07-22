@@ -34,7 +34,7 @@
           <div class="form-check form-switch mb-0">
             <input class="form-check-input" type="checkbox" id="alert-tp-only" onchange="toggleTpOnly(this)">
             <label class="form-check-label small" for="alert-tp-only"
-                   title="오탐 의심(저신뢰) 알림 숨기기">정탐만 보기</label>
+                   title="임계값 미만 저신뢰 알림 숨기기">고신뢰만 보기</label>
           </div>
         </div>
         <div class="col-auto ms-auto">
@@ -47,7 +47,7 @@
         <table id="alerts-table" class="table table-dark table-hover table-sm mb-0">
           <thead>
             <tr>
-              <th>시각</th><th>심각도</th><th>유형</th><th>출발지</th><th>목적지</th><th>설명</th><th>상태</th><th>조치</th>
+              <th>시각</th><th>심각도</th><th>유형</th><th>출처</th><th>출발지</th><th>목적지</th><th>설명</th><th>처리</th><th>확정 판정</th><th>조치</th>
             </tr>
           </thead>
           <tbody id="alerts-tbody"></tbody>

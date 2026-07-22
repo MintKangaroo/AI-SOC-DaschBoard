@@ -130,6 +130,46 @@ sudo snort -T -c /etc/snort/snort.conf -i eth0
 출발지·목적지를 확인한다. `/api/integrations/snort`는 동일 정보를 JSON으로
 제공한다. 화면은 현재 탭이 보일 때만 10초 간격으로 갱신한다.
 
+SID별 표에는 분석가가 확정한 정탐·오탐 건수와 정탐률을 표시한다.
+`SNORT_BLOCK_EXCLUDED_SIDS`에 등록된 SID는 탐지 이력에는 남지만 자동 차단의
+독립 근거로 인정하지 않는다. 기본값 `254`는 Tailscale DNS 응답 오탐 억제용이다.
+
+## 실운영 데이터와 분석가 판정
+
+실전 센서 운영에서는 `.env`의 `DEMO_MODE=False`를 사용한다. 알림의 처리 상태
+(`OPEN/ACK/CLOSED`)와 분석가 확정 판정은 별개이며, 판정은 다음 네 상태다.
+
+- `UNREVIEWED`: 미판정
+- `INVESTIGATING`: 조사 중
+- `TRUE_POSITIVE`: 근거가 기록된 정탐 확정
+- `FALSE_POSITIVE`: 근거가 기록된 오탐 확정
+
+기존 데모 기간과 실운영의 경계는 다음 명령으로 무손실 아카이브한다. 실행 전
+동일 DB의 시점 백업을 자동 생성하며 활성 행만 아카이브 테이블로 이동한다.
+
+```bash
+./venv/bin/python scripts/production_cutover.py
+./venv/bin/python scripts/production_cutover.py --apply
+```
+
+인시던트 운영 저장소는 `data/incidents.db`다. 최초 실행 시 기존
+`data/incidents.json`을 자동 이관하며 원본 JSON과 `.bak`은 삭제하지 않는다.
+
+## 제한된 UFW SOAR helper
+
+대시보드 사용자에게 일반 `ufw` sudo 권한을 주지 않는다. 아래 설치기는
+`status`, 공개 IPv4 단건 `block/unblock`만 가능한 `/usr/local/sbin/soc-ufw`와
+전용 sudoers 항목을 설치한다. helper도 사설·루프백·Tailscale·비 IPv4 입력을
+거부한다.
+
+```bash
+sudo bash scripts/install_soar_ufw_helper.sh
+sudo -n /usr/local/sbin/soc-ufw status
+```
+
+검증 후에만 `.env`를 `SOAR_BLOCK_MODE=ufw`로 변경한다. 복수 근거·95%·분석가
+승인·TTL·allowlist 검사는 helper 호출 전에도 유지된다.
+
 ### 지원 예정 시스템
 - Suricata
 - Zeek (Bro)

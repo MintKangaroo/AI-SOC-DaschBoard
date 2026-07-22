@@ -31,7 +31,24 @@ class AlertStore:
                     assignee    TEXT DEFAULT ''
                 )
             """)
+            self._migrate_alert_columns("alerts")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON alerts(timestamp)")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_alerts_verdict ON alerts(verdict)")
+            self._conn.execute("CREATE INDEX IF NOT EXISTS idx_alerts_threat ON alerts(threat_type)")
             self._conn.commit()
+
+    def _migrate_alert_columns(self, table):
+        existing = {row[1] for row in self._conn.execute(f"PRAGMA table_info({table})")}
+        additions = {
+            "origin": "TEXT DEFAULT 'unknown'",
+            "verdict": "TEXT DEFAULT 'UNREVIEWED'",
+            "verdict_actor": "TEXT DEFAULT ''",
+            "verdict_reason": "TEXT DEFAULT ''",
+            "verdict_at": "TEXT DEFAULT ''",
+        }
+        for name, ddl in additions.items():
+            if name not in existing:
+                self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
 
     def save(self, alert):
         """Alert 객체 저장 (id 충돌 시 갱신)"""
@@ -39,14 +56,30 @@ class AlertStore:
             self._conn.execute(
                 """INSERT OR REPLACE INTO alerts
                    (id, threat_type, severity, src_ip, dst_ip, description,
-                    details, timestamp, status, note, assignee)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    details, timestamp, status, note, assignee, origin,
+                    verdict, verdict_actor, verdict_reason, verdict_at)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (alert.id, alert.threat_type, alert.severity, alert.src_ip,
                  alert.dst_ip, alert.description,
                  json.dumps(alert.details, ensure_ascii=False),
-                 alert.timestamp, alert.status, alert.note, alert.assignee),
+                 alert.timestamp, alert.status, alert.note, alert.assignee,
+                 getattr(alert, "origin", "unknown"),
+                 getattr(alert, "verdict", "UNREVIEWED"),
+                 getattr(alert, "verdict_actor", ""),
+                 getattr(alert, "verdict_reason", ""),
+                 getattr(alert, "verdict_at", "")),
             )
             self._conn.commit()
+
+    def set_verdict(self, alert_id, verdict, actor, reason, decided_at):
+        if verdict not in ("UNREVIEWED", "INVESTIGATING", "TRUE_POSITIVE", "FALSE_POSITIVE"):
+            return False
+        with self._lock:
+            cur = self._conn.execute(
+                """UPDATE alerts SET verdict=?, verdict_actor=?, verdict_reason=?, verdict_at=?
+                   WHERE id=?""", (verdict, actor, reason, decided_at, alert_id))
+            self._conn.commit()
+        return cur.rowcount == 1
 
     def update_status(self, alert_id, status, note=None, assignee=None):
         sets, params = ["status = ?"], [status]
@@ -84,7 +117,8 @@ class AlertStore:
         with self._lock:
             rows = self._conn.execute(
                 """SELECT id, threat_type, severity, src_ip, dst_ip, description,
-                          details, timestamp, status, note, assignee
+                          details, timestamp, status, note, assignee,
+                          origin, verdict, verdict_actor, verdict_reason, verdict_at
                    FROM alerts ORDER BY id DESC LIMIT ?""",
                 (limit,),
             ).fetchall()
@@ -98,11 +132,13 @@ class AlertStore:
                 "id": row[0], "threat_type": row[1], "severity": row[2],
                 "src_ip": row[3], "dst_ip": row[4], "description": row[5],
                 "details": details, "timestamp": row[7], "status": row[8],
-                "note": row[9], "assignee": row[10],
+                "note": row[9], "assignee": row[10], "origin": row[11],
+                "verdict": row[12], "verdict_actor": row[13],
+                "verdict_reason": row[14], "verdict_at": row[15],
             })
         return result
 
-    def search(self, severity=None, status=None, threat_type=None,
+    def search(self, severity=None, status=None, threat_type=None, verdict=None, origin=None,
                ip=None, text=None, date_from=None, date_to=None,
                limit=100, offset=0):
         """조건별 알림 이력 검색 (전체 DB 대상). (rows, total) 반환.
@@ -118,6 +154,10 @@ class AlertStore:
             where.append("status = ?"); params.append(status)
         if threat_type:
             where.append("threat_type = ?"); params.append(threat_type)
+        if verdict:
+            where.append("verdict = ?"); params.append(verdict)
+        if origin:
+            where.append("origin = ?"); params.append(origin)
         if ip:
             where.append("(src_ip LIKE ? OR dst_ip LIKE ?)")
             params += [f"%{ip}%", f"%{ip}%"]
@@ -135,7 +175,8 @@ class AlertStore:
             ).fetchone()[0]
             rows = self._conn.execute(
                 f"""SELECT id, threat_type, severity, src_ip, dst_ip, description,
-                           details, timestamp, status, note, assignee
+                           details, timestamp, status, note, assignee,
+                           origin, verdict, verdict_actor, verdict_reason, verdict_at
                     FROM alerts {clause}
                     ORDER BY id DESC LIMIT ? OFFSET ?""",
                 params + [int(limit), int(offset)],
@@ -151,7 +192,9 @@ class AlertStore:
                 "id": row[0], "threat_type": row[1], "severity": row[2],
                 "src_ip": row[3], "dst_ip": row[4], "description": row[5],
                 "details": details, "timestamp": row[7], "status": row[8],
-                "note": row[9], "assignee": row[10],
+                "note": row[9], "assignee": row[10], "origin": row[11],
+                "verdict": row[12], "verdict_actor": row[13],
+                "verdict_reason": row[14], "verdict_at": row[15],
             })
         return result, total
 
@@ -253,6 +296,25 @@ class AlertStore:
                  "first_seen": r[3], "last_seen": r[4], "open_count": r[5],
                  "severity": sev.get(r[6], "INFO")} for r in rows]
 
+    def snort_sid_stats(self, limit=30):
+        """분석가 확정 판정을 기준으로 SID별 정·오탐 품질을 집계한다."""
+        with self._lock:
+            rows = self._conn.execute(
+                """SELECT CAST(json_extract(details, '$.signature_id') AS INTEGER) sid,
+                          COUNT(*) total,
+                          SUM(CASE WHEN verdict='TRUE_POSITIVE' THEN 1 ELSE 0 END) tp,
+                          SUM(CASE WHEN verdict='FALSE_POSITIVE' THEN 1 ELSE 0 END) fp,
+                          MAX(timestamp) last_seen
+                   FROM alerts WHERE threat_type='SNORT_ALERT'
+                         AND json_extract(details, '$.signature_id') IS NOT NULL
+                   GROUP BY sid ORDER BY total DESC, last_seen DESC LIMIT ?""",
+                (max(1, min(200, int(limit))),)).fetchall()
+        return [{"sid": r[0], "total": r[1], "tp": r[2], "fp": r[3],
+                 "unreviewed": r[1] - r[2] - r[3],
+                 "accuracy": round(r[2] * 100 / (r[2] + r[3]), 1)
+                             if r[2] + r[3] else None,
+                 "last_seen": r[4]} for r in rows]
+
     def _ensure_archive(self):
         self._conn.execute("""
             CREATE TABLE IF NOT EXISTS alerts_archive (
@@ -262,6 +324,7 @@ class AlertStore:
                 status TEXT, note TEXT, assignee TEXT,
                 archived_at TEXT
             )""")
+        self._migrate_alert_columns("alerts_archive")
 
     def retention_stats(self):
         """보존 현황 — 활성/아카이브 건수, 최고(古)/최신 시각."""
@@ -322,14 +385,41 @@ class AlertStore:
                 self._conn.execute(
                     f"""INSERT OR REPLACE INTO alerts_archive
                         (id, threat_type, severity, src_ip, dst_ip, description,
-                         details, timestamp, status, note, assignee, archived_at)
+                         details, timestamp, status, note, assignee, archived_at,
+                         origin, verdict, verdict_actor, verdict_reason, verdict_at)
                         SELECT id, threat_type, severity, src_ip, dst_ip, description,
-                               details, timestamp, status, note, assignee, ?
+                               details, timestamp, status, note, assignee, ?,
+                               origin, verdict, verdict_actor, verdict_reason, verdict_at
                         FROM alerts WHERE timestamp < {cutoff_expr}""", (now, arg))
                 self._conn.execute(
                     f"DELETE FROM alerts WHERE timestamp < {cutoff_expr}", (arg,))
                 self._conn.commit()
         return moved
+
+    def production_cutover(self, cutoff):
+        """컷오버 이전 활성 알림을 legacy로 표시해 무손실 아카이브한다."""
+        from datetime import datetime
+        with self._lock:
+            self._ensure_archive()
+            now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            count = self._conn.execute(
+                "SELECT COUNT(*) FROM alerts WHERE timestamp < ?", (cutoff,)).fetchone()[0]
+            if not count:
+                return 0
+            self._conn.execute(
+                "UPDATE alerts SET origin='legacy' WHERE timestamp < ?", (cutoff,))
+            self._conn.execute(
+                """INSERT OR REPLACE INTO alerts_archive
+                   (id, threat_type, severity, src_ip, dst_ip, description, details,
+                    timestamp, status, note, assignee, archived_at, origin, verdict,
+                    verdict_actor, verdict_reason, verdict_at)
+                   SELECT id, threat_type, severity, src_ip, dst_ip, description, details,
+                          timestamp, status, note, assignee, ?, origin, verdict,
+                          verdict_actor, verdict_reason, verdict_at
+                   FROM alerts WHERE timestamp < ?""", (now, cutoff))
+            self._conn.execute("DELETE FROM alerts WHERE timestamp < ?", (cutoff,))
+            self._conn.commit()
+        return count
 
     def purge_older_than(self, days):
         """N일 이전 알림을 활성·아카이브 테이블에서 영구 삭제. 삭제 건수 반환."""
@@ -349,7 +439,10 @@ class AlertStore:
 
     def max_id(self):
         with self._lock:
-            row = self._conn.execute("SELECT MAX(id) FROM alerts").fetchone()
+            self._ensure_archive()
+            row = self._conn.execute(
+                "SELECT MAX(id) FROM (SELECT id FROM alerts UNION ALL SELECT id FROM alerts_archive)"
+            ).fetchone()
         return row[0] or 0
 
     def close(self):

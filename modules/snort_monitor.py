@@ -61,6 +61,9 @@ class SnortMonitor:
         self.poll_interval = max(0.1, float(config.get("SNORT_POLL_INTERVAL", 0.5)))
         self.interface = str(config.get("SNORT_INTERFACE", "eth0"))
         self.home_net = str(config.get("SNORT_HOME_NET", "172.23.160.0/20"))
+        excluded = str(config.get("SNORT_BLOCK_EXCLUDED_SIDS", "254"))
+        self.excluded_sids = {int(x.strip()) for x in excluded.split(",")
+                              if x.strip().isdigit()}
         self.running = False
         self.events = deque(maxlen=200)
         self.stats = {"parsed": 0, "invalid": 0, "alerts": 0, "status": "stopped"}
@@ -91,8 +94,13 @@ class SnortMonitor:
                 "protected_paths": ["SSH 22", "HTTP 80", "Tailscale", "Dashboard 5055"],
             }
             self._system_cache = (system, now)
+        quality = []
+        store = getattr(self.threat_detector, "store", None)
+        if store:
+            quality = store.snort_sid_stats(limit=30)
         return {**self.stats, "enabled": self.enabled, "alert_path": self.alert_path,
-                "recent": list(self.events)[:20], "system": system}
+                "recent": list(self.events)[:20], "system": system,
+                "excluded_sids": sorted(self.excluded_sids), "sid_quality": quality}
 
     @staticmethod
     def _service_state(name):
@@ -124,6 +132,9 @@ class SnortMonitor:
                 "src_port": event["src_port"], "dst_port": event["dst_port"],
                 "evidence": ["snort_signature"], "demo": False,
             }
+            if event["sid"] in self.excluded_sids:
+                details["block_excluded"] = True
+                details["evidence"] = []
             self.threat_detector.report_alert(
                 "SNORT_ALERT", severity, event["src_ip"], event["dst_ip"],
                 f"[Snort SID {event['sid']}] {event['message']}", details)

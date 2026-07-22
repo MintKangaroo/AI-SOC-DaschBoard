@@ -12,6 +12,7 @@ data/incidents.json 에 원자적으로 영속화하고 직전 정상본을 .bak
 import os
 import json
 import shutil
+import sqlite3
 import tempfile
 import threading
 from datetime import datetime
@@ -211,6 +212,8 @@ class IncidentManager:
     def _load(self):
         if not self.store_path:
             return
+        if self.store_path.endswith(".db"):
+            return self._load_sqlite()
         candidates = (self.store_path, self.store_path + ".bak")
         last_error = None
         for path in candidates:
@@ -236,6 +239,8 @@ class IncidentManager:
 
     def _save(self, create_backup=True):
         """완성된 임시 파일만 원본과 교체해 중단 시 JSON 절단을 방지한다."""
+        if self.store_path.endswith(".db"):
+            return self._save_sqlite()
         tmp_path = None
         try:
             directory = os.path.dirname(self.store_path) or "."
@@ -255,7 +260,6 @@ class IncidentManager:
                     pass
             os.replace(tmp_path, self.store_path)
             tmp_path = None
-            # 최초 저장에도 복구본을 남긴다. 이후 저장부터는 위에서 직전 정상본을 보존한다.
             if create_backup and not os.path.exists(self.store_path + ".bak"):
                 try:
                     shutil.copy2(self.store_path, self.store_path + ".bak")
@@ -269,6 +273,62 @@ class IncidentManager:
                     os.remove(tmp_path)
                 except OSError:
                     pass
+
+    def _load_sqlite(self):
+        """SQLite 저장소 초기화 및 기존 incidents.json 무손실 1회 이관."""
+        directory = os.path.dirname(self.store_path) or "."
+        os.makedirs(directory, exist_ok=True)
+        self._db = sqlite3.connect(self.store_path, check_same_thread=False)
+        self._db.execute("PRAGMA journal_mode=WAL")
+        self._db.execute("PRAGMA synchronous=NORMAL")
+        self._db.execute("""CREATE TABLE IF NOT EXISTS incidents (
+            id INTEGER PRIMARY KEY, payload TEXT NOT NULL, updated TEXT NOT NULL)""")
+        self._db.execute("""CREATE TABLE IF NOT EXISTS incident_meta (
+            key TEXT PRIMARY KEY, value TEXT NOT NULL)""")
+        rows = self._db.execute("SELECT id, payload FROM incidents").fetchall()
+        if rows:
+            for inc_id, payload in rows:
+                try:
+                    self.incidents[int(inc_id)] = json.loads(payload)
+                except (ValueError, TypeError, json.JSONDecodeError):
+                    continue
+            meta = self._db.execute(
+                "SELECT value FROM incident_meta WHERE key='next_id'").fetchone()
+            self._next_id = max(int(meta[0]) if meta else 1,
+                                max(self.incidents.keys(), default=0) + 1)
+            return
+
+        legacy = os.path.splitext(self.store_path)[0] + ".json"
+        if os.path.exists(legacy):
+            original = self.store_path
+            self.store_path = legacy
+            self._load()
+            self.store_path = original
+            if self.incidents:
+                self._save_sqlite()
+                print(f"[Incidents] JSON → SQLite 무손실 이관: {len(self.incidents)}건")
+
+    def _save_sqlite(self):
+        try:
+            rows = [(int(k), json.dumps(v, ensure_ascii=False), v.get("updated", _now()))
+                    for k, v in self.incidents.items()]
+            with self._db:
+                self._db.executemany(
+                    """INSERT INTO incidents(id,payload,updated) VALUES(?,?,?)
+                       ON CONFLICT(id) DO UPDATE SET payload=excluded.payload,
+                       updated=excluded.updated""", rows)
+                ids = [r[0] for r in rows]
+                if ids:
+                    marks = ",".join("?" for _ in ids)
+                    self._db.execute(f"DELETE FROM incidents WHERE id NOT IN ({marks})", ids)
+                else:
+                    self._db.execute("DELETE FROM incidents")
+                self._db.execute(
+                    """INSERT INTO incident_meta(key,value) VALUES('next_id',?)
+                       ON CONFLICT(key) DO UPDATE SET value=excluded.value""",
+                    (str(self._next_id),))
+        except (OSError, sqlite3.Error, ValueError, TypeError) as e:
+            print(f"[Incidents] SQLite 저장 실패: {e}")
 
     def _schedule_save(self):
         """고빈도 자동 병합은 묶어서 저장해 대형 JSON의 반복 fsync를 줄인다."""

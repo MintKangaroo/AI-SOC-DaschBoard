@@ -49,6 +49,13 @@ function renderSnortStatus(d) {
     <td><code>${Number(e.sid)||'—'}</code></td><td>${escapeHtml(e.message || '')}</td>
     <td class="font-monospace">${escapeHtml(e.src_ip || '')}${e.src_port ? ':'+Number(e.src_port) : ''}</td>
     <td class="font-monospace">${escapeHtml(e.dst_ip || '')}${e.dst_port ? ':'+Number(e.dst_port) : ''}</td><td>${escapeHtml(e.protocol || '')}</td></tr>`).join('');
+  const quality = document.getElementById('snort-sid-quality');
+  const excluded = new Set((d.excluded_sids || []).map(Number));
+  if (quality && (d.sid_quality || []).length) quality.innerHTML = d.sid_quality.map(s => `<tr>
+    <td><code>${Number(s.sid)}</code></td><td>${Number(s.total)}</td><td class="text-danger">${Number(s.tp)}</td>
+    <td class="text-success">${Number(s.fp)}</td><td>${Number(s.unreviewed)}</td>
+    <td>${s.accuracy == null ? '—' : Number(s.accuracy).toFixed(1)+'%'}</td>
+    <td>${excluded.has(Number(s.sid)) ? '<span class="badge bg-secondary">자동 차단 제외</span>' : '<span class="badge bg-warning text-dark">교차검증 대상</span>'}</td></tr>`).join('');
 }
 
 function loadSnort(force = false) {

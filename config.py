@@ -27,6 +27,7 @@ class Config:
     SNORT_POLL_INTERVAL = float(os.getenv("SNORT_POLL_INTERVAL", 0.5))
     SNORT_INTERFACE = os.getenv("SNORT_INTERFACE", "eth0")
     SNORT_HOME_NET = os.getenv("SNORT_HOME_NET", "172.23.160.0/20")
+    SNORT_BLOCK_EXCLUDED_SIDS = os.getenv("SNORT_BLOCK_EXCLUDED_SIDS", "254")
 
     # Sysmon log path (Windows)
     SYSMON_LOG_CHANNEL = os.getenv("SYSMON_LOG_CHANNEL", "Microsoft-Windows-Sysmon/Operational")
@@ -125,6 +126,7 @@ class Config:
     SOAR_BLOCK_TTL_HOURS = float(os.getenv("SOAR_BLOCK_TTL_HOURS", 24))
     # 절대 차단 금지 IP/대역 (쉼표 구분, 대역은 "1.2.3." 형태 접두). 사설·Tailscale은 자동 보호
     SOAR_BLOCK_ALLOWLIST = os.getenv("SOAR_BLOCK_ALLOWLIST", "")
+    SOAR_FIREWALL_HELPER = os.getenv("SOAR_FIREWALL_HELPER", "/usr/local/sbin/soc-ufw")
 
     # ── 대시보드 인증 ──
     AUTH_ENABLED = os.getenv("AUTH_ENABLED", "True") == "True"

@@ -257,13 +257,13 @@ def test_soar_fp_auto_close(tmp_path):
 
 def test_soar_tp_critical_auto_block(tmp_path):
     td = make_detector()
-    alert = Alert("DDOS", "CRITICAL", "203.0.113.9", "192.168.1.5", "DDoS")
+    alert = Alert("DDOS", "CRITICAL", "45.155.205.233", "192.168.1.5", "DDoS")
     td._add_alert(alert)
     soar = make_soar(tmp_path, is_tp=True, confidence=95, td=td)
     soar._process_alert(alert.to_dict())
 
     assert soar.stats["escalated_tp"] == 1
-    assert "203.0.113.9" in soar.blocked_ips
+    assert "45.155.205.233" in soar.blocked_ips
     acked = next(a for a in td.get_alerts() if a["id"] == alert.id)
     assert acked["status"] == "ACK"
 
@@ -705,7 +705,7 @@ def test_alert_store_groups_repeated_alerts(tmp_path):
 
 def test_soar_promotes_incident_on_tp(tmp_path):
     td = make_detector()
-    alert = Alert("DDOS", "CRITICAL", "203.0.113.9", "192.168.1.5", "DDoS")
+    alert = Alert("DDOS", "CRITICAL", "45.155.205.233", "192.168.1.5", "DDoS")
     td._add_alert(alert)
     soar = make_soar(tmp_path, is_tp=True, confidence=95, td=td)
     soar.incidents = IncidentManager(store_path=str(tmp_path / "inc.json"))
@@ -1272,3 +1272,34 @@ def test_watchlist_hit_via_add_alert(tmp_path):
     items, stats = wl.list_all()
     assert items[0]["hits"] == 1 and stats["hit_total"] == 1
     td.store.close(); wl.close()
+
+
+def test_incident_json_migrates_to_sqlite_without_removing_source(tmp_path):
+    legacy = tmp_path / "incidents.json"
+    legacy.write_text(json.dumps({"next_id": 3, "incidents": {"2": {
+        "id": 2, "title": "legacy", "threat_type": "TEST", "src_net": "x",
+        "severity": "HIGH", "status": "OPEN", "assignee": "", "alert_ids": [],
+        "created": "2026-01-01 00:00:00", "updated": "2026-01-01 00:00:00",
+        "timeline": []}}}), encoding="utf-8")
+    db_path = tmp_path / "incidents.db"
+    manager = IncidentManager(store_path=str(db_path))
+    assert manager.get(2)["title"] == "legacy"
+    assert legacy.exists() and db_path.exists()
+    restored = IncidentManager(store_path=str(db_path))
+    assert restored.get(2)["status"] == "OPEN"
+
+
+def test_alert_verdict_and_production_cutover_are_lossless(tmp_path):
+    db = tmp_path / "alerts.db"
+    store = AlertStore(str(db))
+    alert = Alert("SNORT_ALERT", "HIGH", "8.8.8.8", "1.1.1.1", "sid", {
+        "source": "snort", "signature_id": 42})
+    alert.timestamp = "2025-01-01 00:00:00"
+    store.save(alert)
+    assert store.set_verdict(alert.id, "TRUE_POSITIVE", "kim", "패킷 원문 확인",
+                             "2026-01-01 00:00:00")
+    assert store.snort_sid_stats()[0]["tp"] == 1
+    assert store.production_cutover("2026-01-01 00:00:00") == 1
+    stats = store.retention_stats()
+    assert stats["live"] == 0 and stats["archived"] == 1
+    assert store.max_id() == alert.id
