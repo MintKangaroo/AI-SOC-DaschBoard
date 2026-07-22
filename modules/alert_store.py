@@ -14,8 +14,11 @@ class AlertStore:
         if directory:
             os.makedirs(directory, exist_ok=True)
         self._conn = sqlite3.connect(db_path, check_same_thread=False)
+        stem, ext = os.path.splitext(db_path)
+        self.archive_path = f"{stem}_archive{ext or '.db'}"
         self._lock = threading.Lock()
         with self._lock:
+            self._conn.execute("ATTACH DATABASE ? AS archive", (self.archive_path,))
             self._conn.execute("""
                 CREATE TABLE IF NOT EXISTS alerts (
                     id          INTEGER PRIMARY KEY,
@@ -32,13 +35,18 @@ class AlertStore:
                 )
             """)
             self._migrate_alert_columns("alerts")
+            self._ensure_archive()
+            moved_inline = self._migrate_inline_archive()
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON alerts(timestamp)")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_alerts_verdict ON alerts(verdict)")
             self._conn.execute("CREATE INDEX IF NOT EXISTS idx_alerts_threat ON alerts(threat_type)")
             self._conn.commit()
+            if moved_inline:
+                self._conn.execute("VACUUM")
 
-    def _migrate_alert_columns(self, table):
-        existing = {row[1] for row in self._conn.execute(f"PRAGMA table_info({table})")}
+    def _migrate_alert_columns(self, table, schema="main"):
+        existing = {row[1] for row in self._conn.execute(
+            f"PRAGMA {schema}.table_info({table})")}
         additions = {
             "origin": "TEXT DEFAULT 'unknown'",
             "verdict": "TEXT DEFAULT 'UNREVIEWED'",
@@ -48,7 +56,29 @@ class AlertStore:
         }
         for name, ddl in additions.items():
             if name not in existing:
-                self._conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {ddl}")
+                self._conn.execute(
+                    f"ALTER TABLE {schema}.{table} ADD COLUMN {name} {ddl}")
+
+    def _migrate_inline_archive(self):
+        """구버전 메인 DB 내부 아카이브를 별도 DB로 검증 후 이전한다."""
+        exists = self._conn.execute(
+            "SELECT 1 FROM main.sqlite_master WHERE type='table' AND name='alerts_archive'"
+        ).fetchone()
+        if not exists:
+            return 0
+        self._migrate_alert_columns("alerts_archive", "main")
+        before = self._conn.execute("SELECT COUNT(*) FROM main.alerts_archive").fetchone()[0]
+        if not before:
+            self._conn.execute("DROP TABLE main.alerts_archive")
+            return 0
+        self._conn.execute(
+            """INSERT OR REPLACE INTO archive.alerts_archive
+               SELECT * FROM main.alerts_archive""")
+        after = self._conn.execute("SELECT COUNT(*) FROM archive.alerts_archive").fetchone()[0]
+        if after < before:
+            raise RuntimeError("아카이브 분리 검증 실패")
+        self._conn.execute("DROP TABLE main.alerts_archive")
+        return before
 
     def save(self, alert):
         """Alert 객체 저장 (id 충돌 시 갱신)"""
@@ -317,14 +347,14 @@ class AlertStore:
 
     def _ensure_archive(self):
         self._conn.execute("""
-            CREATE TABLE IF NOT EXISTS alerts_archive (
+            CREATE TABLE IF NOT EXISTS archive.alerts_archive (
                 id          INTEGER PRIMARY KEY,
                 threat_type TEXT, severity TEXT, src_ip TEXT, dst_ip TEXT,
                 description TEXT, details TEXT, timestamp TEXT,
                 status TEXT, note TEXT, assignee TEXT,
                 archived_at TEXT
             )""")
-        self._migrate_alert_columns("alerts_archive")
+        self._migrate_alert_columns("alerts_archive", "archive")
 
     def retention_stats(self):
         """보존 현황 — 활성/아카이브 건수, 최고(古)/최신 시각."""
@@ -333,9 +363,9 @@ class AlertStore:
             live = self._conn.execute("SELECT COUNT(*) FROM alerts").fetchone()[0]
             oldest, newest = self._conn.execute(
                 "SELECT MIN(timestamp), MAX(timestamp) FROM alerts").fetchone()
-            arch = self._conn.execute("SELECT COUNT(*) FROM alerts_archive").fetchone()[0]
+            arch = self._conn.execute("SELECT COUNT(*) FROM archive.alerts_archive").fetchone()[0]
             arch_newest = self._conn.execute(
-                "SELECT MAX(timestamp) FROM alerts_archive").fetchone()[0]
+                "SELECT MAX(timestamp) FROM archive.alerts_archive").fetchone()[0]
         return {"live": live, "archived": arch, "oldest": oldest,
                 "newest": newest, "archived_newest": arch_newest}
 
@@ -347,7 +377,7 @@ class AlertStore:
                 "SELECT COUNT(*) FROM alerts WHERE timestamp < datetime('now', ?, 'localtime')",
                 (f"-{int(live_days)} days",)).fetchone()[0]
             to_delete = self._conn.execute(
-                """SELECT COUNT(*) FROM alerts_archive
+                """SELECT COUNT(*) FROM archive.alerts_archive
                    WHERE COALESCE(archived_at, timestamp) < datetime('now', ?, 'localtime')""",
                 (f"-{int(archive_days)} days",)).fetchone()[0]
         return {"to_archive": to_archive, "archive_to_delete": to_delete}
@@ -358,12 +388,12 @@ class AlertStore:
             self._ensure_archive()
             arg = f"-{int(days)} days"
             count = self._conn.execute(
-                """SELECT COUNT(*) FROM alerts_archive
+                """SELECT COUNT(*) FROM archive.alerts_archive
                    WHERE COALESCE(archived_at, timestamp) < datetime('now', ?, 'localtime')""",
                 (arg,)).fetchone()[0]
             if count:
                 self._conn.execute(
-                    """DELETE FROM alerts_archive
+                    """DELETE FROM archive.alerts_archive
                        WHERE COALESCE(archived_at, timestamp) < datetime('now', ?, 'localtime')""",
                     (arg,))
                 self._conn.commit()
@@ -383,7 +413,7 @@ class AlertStore:
                 (arg,)).fetchone()[0]
             if moved:
                 self._conn.execute(
-                    f"""INSERT OR REPLACE INTO alerts_archive
+                    f"""INSERT OR REPLACE INTO archive.alerts_archive
                         (id, threat_type, severity, src_ip, dst_ip, description,
                          details, timestamp, status, note, assignee, archived_at,
                          origin, verdict, verdict_actor, verdict_reason, verdict_at)
@@ -409,7 +439,7 @@ class AlertStore:
             self._conn.execute(
                 "UPDATE alerts SET origin='legacy' WHERE timestamp < ?", (cutoff,))
             self._conn.execute(
-                """INSERT OR REPLACE INTO alerts_archive
+                """INSERT OR REPLACE INTO archive.alerts_archive
                    (id, threat_type, severity, src_ip, dst_ip, description, details,
                     timestamp, status, note, assignee, archived_at, origin, verdict,
                     verdict_actor, verdict_reason, verdict_at)
@@ -432,8 +462,8 @@ class AlertStore:
                 f"SELECT COUNT(*) FROM alerts WHERE timestamp < {cutoff}", (arg,)).fetchone()[0]
             self._conn.execute(f"DELETE FROM alerts WHERE timestamp < {cutoff}", (arg,))
             n2 = self._conn.execute(
-                f"SELECT COUNT(*) FROM alerts_archive WHERE timestamp < {cutoff}", (arg,)).fetchone()[0]
-            self._conn.execute(f"DELETE FROM alerts_archive WHERE timestamp < {cutoff}", (arg,))
+                f"SELECT COUNT(*) FROM archive.alerts_archive WHERE timestamp < {cutoff}", (arg,)).fetchone()[0]
+            self._conn.execute(f"DELETE FROM archive.alerts_archive WHERE timestamp < {cutoff}", (arg,))
             self._conn.commit()
         return n1 + n2
 
@@ -441,7 +471,7 @@ class AlertStore:
         with self._lock:
             self._ensure_archive()
             row = self._conn.execute(
-                "SELECT MAX(id) FROM (SELECT id FROM alerts UNION ALL SELECT id FROM alerts_archive)"
+                "SELECT MAX(id) FROM (SELECT id FROM alerts UNION ALL SELECT id FROM archive.alerts_archive)"
             ).fetchone()
         return row[0] or 0
 

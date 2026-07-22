@@ -17,6 +17,11 @@ data/.incidents-*.tmp
 data/blocklist.txt
 data/incidents.json
 data/incidents.json.bak
+data/incidents.db
+data/incidents.json.gz
+data/incidents.json.bak.gz
+data/alerts_archive.db
+data/alerts.db.pre-production-*.bak.gz
 data/ansible/
 data/models/
 # 이전 세션 포트폴리오 잔재 (docs/PORTFOLIO.md 로 통합됨)
