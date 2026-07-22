@@ -35,7 +35,9 @@ Flask 및 Flask-SocketIO 기반 실시간 SOC 대시보드다. 패킷·Sysmon·S
   복구본은 7MB gzip으로 보존한다. 인시던트 23,295건은 SQLite로 이관 완료했고
   두 JSON 세대는 각각 약 1.4MB gzip 복구본으로 보존한다.
 - 실전 모드에서 AbuseIPDB 미설정/API 실패 시 데모 점수 fallback을 금지했다.
-  컷오버 직후 잘못 생성된 MALWARE_BEACON 5건은 SYSTEM 오탐 확정·CLOSED 처리했다.
+  컷오버 직후 잘못 생성된 MALWARE_BEACON 6건은 SYSTEM 오탐 확정·CLOSED 처리했다.
+- 과거 simulate 차단 2,046건은 `blocklist_legacy_simulate_*.txt`로 무손실 분리해
+  실전 UFW 활성 차단 통계와 혼동되지 않게 했다.
 - Snort fast-alert 연동 및 보수적 자동 차단 증거 게이트 추가. Snort 단독 탐지는
   차단하지 않으며 기본값은 CRITICAL + 95% + 독립 근거 2개 + 분석가 승인이다.
 - 안전 설치 스크립트 `scripts/setup_snort_ufw_safe.sh` 추가. sudo 비밀번호가

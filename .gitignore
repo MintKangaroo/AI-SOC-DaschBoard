@@ -15,6 +15,7 @@ data/*.db-shm
 data/.incidents-*.tmp
 # 런타임 산출물 (자동 생성/영속화 — 재실행 시 재생성)
 data/blocklist.txt
+data/blocklist_legacy_simulate_*.txt
 data/incidents.json
 data/incidents.json.bak
 data/incidents.db
